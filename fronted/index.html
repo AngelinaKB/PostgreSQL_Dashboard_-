@@ -1,0 +1,881 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Data Ingestion</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --bg: #ffffff; --bg-secondary: #f5f5f3; --bg-tertiary: #eeede9;
+      --bg-success: #eaf3de; --bg-danger: #fcebeb; --bg-warning: #faeeda; --bg-info: #e6f1fb;
+      --text: #1a1a18; --text-secondary: #6b6b67; --text-tertiary: #9e9e9a;
+      --text-success: #3b6d11; --text-danger: #a32d2d; --text-warning: #854f0b; --text-info: #185fa5;
+      --border: rgba(0,0,0,0.12); --border-md: rgba(0,0,0,0.22);
+      --border-danger: rgba(163,45,45,0.3); --border-warning: rgba(133,79,11,0.3); --border-success: rgba(59,109,17,0.3);
+      --radius-md: 8px; --radius-lg: 12px;
+      --font: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      --font-mono: 'Cascadia Code','Fira Code','Consolas',monospace;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --bg: #1e1e1c; --bg-secondary: #2a2a28; --bg-tertiary: #323230;
+        --bg-success: #173404; --bg-danger: #501313; --bg-warning: #412402; --bg-info: #042c53;
+        --text: #f0efeb; --text-secondary: #a0a09c; --text-tertiary: #6b6b67;
+        --text-success: #c0dd97; --text-danger: #f09595; --text-warning: #fac775; --text-info: #85b7eb;
+        --border: rgba(255,255,255,0.1); --border-md: rgba(255,255,255,0.2);
+        --border-danger: rgba(240,149,149,0.25); --border-warning: rgba(250,199,117,0.25); --border-success: rgba(192,221,151,0.25);
+      }
+    }
+    body { font-family: var(--font); background: var(--bg-tertiary); color: var(--text); min-height: 100vh; padding: 2rem 1rem; }
+    .page { max-width: 1100px; margin: 0 auto; }
+    .topbar { display: flex; align-items: center; margin-bottom: 2rem; }
+    .topbar-title { font-size: 20px; font-weight: 500; }
+    .topbar-sub   { font-size: 13px; color: var(--text-secondary); margin-top: 3px; }
+    .stats { display: grid; grid-template-columns: repeat(3, minmax(0,1fr)); gap: 12px; margin-bottom: 1.5rem; }
+    .stat  { background: var(--bg-secondary); border-radius: var(--radius-md); padding: 1rem 1.1rem; }
+    .stat-label { font-size: 12px; color: var(--text-secondary); margin-bottom: 6px; }
+    .stat-value { font-size: 24px; font-weight: 500; }
+    .stat-value span { font-size: 13px; font-weight: 400; color: var(--text-secondary); margin-left: 3px; }
+    .card { background: var(--bg); border: 0.5px solid var(--border); border-radius: var(--radius-lg); padding: 1.5rem; margin-bottom: 1.5rem; }
+    .drop-zone { border: 1.5px dashed var(--border-md); border-radius: var(--radius-md); padding: 2.5rem 1rem; text-align: center; cursor: pointer; transition: background 0.15s; }
+    .drop-zone:hover, .drop-zone.drag { background: var(--bg-secondary); }
+    .drop-icon { width: 40px; height: 40px; margin: 0 auto 12px; color: var(--text-tertiary); }
+    .drop-title { font-size: 15px; font-weight: 500; margin-bottom: 5px; }
+    .drop-sub   { font-size: 13px; color: var(--text-secondary); }
+    .drop-sub b { font-weight: 500; color: var(--text); }
+    #file-input { display: none; }
+    .progress-wrap { margin-top: 1.25rem; display: none; }
+    .progress-bar-bg   { height: 4px; background: var(--bg-secondary); border-radius: 4px; overflow: hidden; }
+    .progress-bar-fill { height: 100%; width: 0%; background: var(--text); border-radius: 4px; transition: width 0.2s ease; }
+    .progress-label    { font-size: 12px; color: var(--text-secondary); margin-top: 7px; }
+    .err-banner  { background: var(--bg-danger);  border: 0.5px solid var(--border-danger);  border-radius: var(--radius-md); padding: 10px 14px; font-size: 13px; color: var(--text-danger);  margin-top: 1rem; display: none; }
+    .warn-banner { background: var(--bg-warning); border: 0.5px solid var(--border-warning); border-radius: var(--radius-md); padding: 10px 14px; font-size: 13px; color: var(--text-warning); margin-top: 1rem; display: none; }
+    .warn-banner ul { margin: 4px 0 0 16px; } .warn-banner li { margin-top: 2px; }
+    .ok-banner   { background: var(--bg-success); border: 0.5px solid var(--border-success); border-radius: var(--radius-md); padding: 10px 14px; font-size: 13px; color: var(--text-success); margin-top: 1rem; display: none; }
+    .section-title { font-size: 15px; font-weight: 500; margin-bottom: 1rem; }
+    .divider { border: none; border-top: 0.5px solid var(--border); margin: 1.25rem 0; }
+    .fields { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+    .field  { background: var(--bg-secondary); border-radius: var(--radius-md); padding: 12px 14px; }
+    .field-full { grid-column: 1 / -1; }
+    .field-label { font-size: 11px; color: var(--text-tertiary); text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 5px; }
+    .field-value { font-size: 14px; font-weight: 500; word-break: break-all; }
+    .field-mono  { font-family: var(--font-mono); font-size: 12px; font-weight: 400; }
+    .result-header { display: flex; align-items: center; gap: 12px; margin-bottom: 1.25rem; padding-bottom: 1.25rem; border-bottom: 0.5px solid var(--border); }
+    .result-icon   { width: 36px; height: 36px; border-radius: var(--radius-md); background: var(--bg-success); display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+    .result-icon svg { width: 18px; height: 18px; }
+    .result-title { font-size: 15px; font-weight: 500; }
+    .result-sub   { font-size: 12px; color: var(--text-secondary); margin-top: 2px; }
+    .badge { display: inline-flex; align-items: center; padding: 3px 10px; border-radius: 20px; font-size: 12px; font-weight: 500; }
+    .badge-success { background: var(--bg-success); color: var(--text-success); }
+    .badge-info    { background: var(--bg-info);    color: var(--text-info); }
+    .badge-warning { background: var(--bg-warning); color: var(--text-warning); }
+    .table-wrap { overflow-x: auto; border-radius: var(--radius-md); border: 0.5px solid var(--border); }
+    table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    thead tr { background: var(--bg-secondary); }
+    th { padding: 9px 14px; text-align: left; font-weight: 500; font-size: 12px; color: var(--text-secondary); border-bottom: 0.5px solid var(--border); white-space: nowrap; }
+    td { padding: 7px 10px; border-bottom: 0.5px solid var(--border); color: var(--text); vertical-align: middle; }
+    tbody tr:last-child td { border-bottom: none; }
+    tbody tr:hover { background: var(--bg-secondary); }
+    .null-cell { color: var(--text-tertiary); font-style: italic; font-size: 12px; }
+    .schema-table th, .schema-table td { padding: 6px 8px; }
+    .schema-table input[type=text] { font-family: var(--font-mono); font-size: 12px; width: 100%; padding: 4px 8px; border: 0.5px solid var(--border-md); border-radius: 6px; background: var(--bg); color: var(--text); }
+    .schema-table input[type=text]:focus { outline: none; border-color: var(--text-secondary); }
+    .schema-table input[type=text].invalid { border-color: var(--text-danger); background: var(--bg-danger); }
+    .schema-table select { font-size: 12px; padding: 4px 6px; border: 0.5px solid var(--border-md); border-radius: 6px; background: var(--bg); color: var(--text); cursor: pointer; max-width: 140px; }
+    .schema-table select:focus { outline: none; }
+    .schema-table input[type=checkbox] { width: 15px; height: 15px; cursor: pointer; accent-color: var(--text); }
+    .orig-name  { font-family: var(--font-mono); font-size: 11px; color: var(--text-secondary); white-space: nowrap; }
+    .dtype-pill { font-size: 11px; font-family: var(--font-mono); background: var(--bg-secondary); border: 0.5px solid var(--border); border-radius: 4px; padding: 2px 6px; white-space: nowrap; }
+    .table-name-row { display: flex; align-items: center; gap: 10px; margin-bottom: 1.25rem; }
+    .table-name-row label { font-size: 13px; font-weight: 500; white-space: nowrap; }
+    .table-name-row input { font-family: var(--font-mono); font-size: 14px; font-weight: 500; padding: 7px 12px; border: 0.5px solid var(--border-md); border-radius: var(--radius-md); background: var(--bg); color: var(--text); flex: 1; max-width: 320px; }
+    .table-name-row input:focus { outline: none; border-color: var(--text-secondary); }
+    .table-name-row input.invalid { border-color: var(--text-danger); background: var(--bg-danger); }
+    .btn { display: inline-flex; align-items: center; gap: 6px; padding: 8px 16px; font-size: 13px; font-weight: 500; border: 0.5px solid var(--border-md); border-radius: var(--radius-md); background: transparent; color: var(--text); cursor: pointer; transition: background 0.1s; font-family: var(--font); white-space: nowrap; }
+    .btn:hover  { background: var(--bg-secondary); }
+    .btn:active { transform: scale(0.98); }
+    .btn-primary { background: var(--text); color: var(--bg); border-color: transparent; }
+    .btn-primary:hover { opacity: 0.85; background: var(--text); }
+    .btn-success { background: var(--bg-success); color: var(--text-success); border-color: var(--border-success); }
+    .btn-success:hover { opacity: 0.85; }
+    .schema-actions { display: flex; align-items: center; gap: 10px; margin-top: 1.25rem; flex-wrap: wrap; }
+    .history-empty { font-size: 13px; color: var(--text-tertiary); text-align: center; padding: 1.5rem 0; }
+    .history-list  { display: flex; flex-direction: column; gap: 8px; }
+    .history-item  { display: flex; align-items: center; gap: 12px; padding: 10px 12px; border: 0.5px solid var(--border); border-radius: var(--radius-md); cursor: pointer; transition: background 0.1s; }
+    .history-item:hover { background: var(--bg-secondary); }
+    .history-name { flex: 1; font-size: 13px; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .history-meta { font-size: 12px; color: var(--text-secondary); white-space: nowrap; }
+    .file-icon  { width: 30px; height: 30px; border-radius: 6px; display: flex; align-items: center; justify-content: center; font-size: 10px; font-weight: 500; flex-shrink: 0; }
+    .file-csv   { background: #eaf3de; color: #3b6d11; }
+    .file-xls   { background: #e1f5ee; color: #0f6e56; }
+    .file-xlsx  { background: #e1f5ee; color: #0f6e56; }
+    .file-other { background: var(--bg-secondary); color: var(--text-secondary); }
+    .spinner { display: inline-block; width: 14px; height: 14px; border: 2px solid var(--border-md); border-top-color: var(--text); border-radius: 50%; animation: spin 0.7s linear infinite; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    ::placeholder { color: var(--text-tertiary); opacity: 1; }
+    .step-indicator { display: flex; align-items: center; gap: 8px; margin-bottom: 1.5rem; }
+    .step { display: flex; align-items: center; gap: 6px; font-size: 13px; color: var(--text-tertiary); }
+    .step.active { color: var(--text); font-weight: 500; }
+    .step.done   { color: var(--text-success); }
+    .step-num { width: 22px; height: 22px; border-radius: 50%; border: 1px solid currentColor; display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 500; flex-shrink: 0; }
+    .step-sep { color: var(--text-tertiary); font-size: 12px; }
+    .job-status-bar { display:none; align-items:center; gap:10px; padding:10px 14px; background:var(--bg-info); border:0.5px solid var(--border-md); border-radius:var(--radius-md); margin-top:1rem; font-size:13px; color:var(--text-info); }
+    @media (max-width: 768px) {
+      .page { padding: 1rem 0.75rem; }
+      .stats { grid-template-columns: 1fr 1fr; }
+      .fields { grid-template-columns: 1fr; }
+      .field-full { grid-column: 1; }
+      .schema-actions { flex-direction: column; align-items: flex-start; }
+      .table-name-row { flex-wrap: wrap; }
+      .table-name-row input { max-width: 100%; }
+      .result-header { flex-wrap: wrap; }
+      .step-indicator { flex-wrap: wrap; gap: 4px; }
+      .table-wrap { font-size: 12px; }
+      th, td { padding: 6px 8px; }
+      .schema-table th, .schema-table td { padding: 4px 6px; }
+      .schema-table select { max-width: 100px; font-size: 11px; }
+      .schema-table input[type=text] { font-size: 11px; }
+      #append-form-fields { grid-template-columns: 1fr 1fr !important; }
+      .card { padding: 1rem; }
+      .btn { padding: 7px 12px; font-size: 12px; }
+    }
+    @media (max-width: 480px) {
+      .stats { grid-template-columns: 1fr; }
+      #append-form-fields { grid-template-columns: 1fr !important; }
+      .step-sep { display: none; }
+      .step { font-size: 12px; }
+    }
+  </style>
+</head>
+<body>
+<div class="page">
+  <div class="topbar">
+    <div>
+      <div class="topbar-title">Data ingestion</div>
+      <div class="topbar-sub">Upload, preview, and define schema for your files</div>
+    </div>
+  </div>
+  <div class="stats">
+    <div class="stat"><div class="stat-label">Files uploaded</div><div class="stat-value" id="stat-count">0</div></div>
+    <div class="stat"><div class="stat-label">Total size</div><div class="stat-value" id="stat-size">0 <span>KB</span></div></div>
+    <div class="stat"><div class="stat-label">Last upload</div><div class="stat-value" id="stat-last" style="font-size:16px">—</div></div>
+  </div>
+  <div class="step-indicator">
+    <div class="step active" id="step-1"><div class="step-num">1</div> Upload</div>
+    <div class="step-sep">›</div>
+    <div class="step" id="step-2"><div class="step-num">2</div> Preview</div>
+    <div class="step-sep">›</div>
+    <div class="step" id="step-3"><div class="step-num">3</div> Define schema</div>
+    <div class="step-sep">›</div>
+    <div class="step" id="step-4"><div class="step-num">4</div> Create table</div>
+  </div>
+
+  <!-- Upload -->
+  <div class="card" id="upload-card">
+    <div class="drop-zone" id="drop-zone" onclick="document.getElementById('file-input').click()">
+      <svg class="drop-icon" viewBox="0 0 40 40" fill="none"><path d="M20 26V14M20 14L15 19M20 14L25 19" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/><path d="M10 31H30M7 22C5.34 20.4 5 18.1 5 16.5C5 11.8 8.8 8 13.5 8C13.9 8 14.3 8.02 14.7 8.07C16.1 5.4 18.9 3.5 22.2 3.5C26.9 3.5 30.7 7.3 30.7 12C30.7 12.3 30.68 12.58 30.65 12.86C33.5 13.8 35.5 16.5 35.5 19.5C35.5 21.6 34.5 23.5 33 24.8" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      <div class="drop-title">Drop your file here or click to browse</div>
+      <div class="drop-sub">Accepts <b>.csv</b>, <b>.xls</b>, <b>.xlsx</b> &nbsp;·&nbsp; Max 50 MB</div>
+      <input type="file" id="file-input" accept=".csv,.xls,.xlsx">
+    </div>
+    <div class="progress-wrap" id="progress-wrap">
+      <div class="progress-bar-bg"><div class="progress-bar-fill" id="progress-fill"></div></div>
+      <div class="progress-label" id="progress-label">Uploading...</div>
+    </div>
+    <div class="err-banner" id="upload-err"></div>
+  </div>
+
+  <!-- File details + preview -->
+  <div class="card" id="details-card" style="display:none">
+    <div class="result-header">
+      <div class="result-icon">
+        <svg fill="none" viewBox="0 0 18 18"><path d="M3 9.5L7 13.5L15 5" stroke="var(--text-success)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </div>
+      <div>
+        <div class="result-title" id="details-title">Uploaded file details</div>
+        <div class="result-sub"  id="details-sub">Ready for processing</div>
+      </div>
+      <span class="badge badge-success" style="margin-left:auto">uploaded</span>
+    </div>
+    <div class="fields">
+      <div class="field field-full"><div class="field-label">Storage ID</div><div class="field-value field-mono" id="d-id"></div></div>
+      <div class="field"><div class="field-label">File name</div><div class="field-value" id="d-filename"></div></div>
+      <div class="field"><div class="field-label">File type</div><div class="field-value" id="d-ct"></div></div>
+      <div class="field"><div class="field-label">Size</div><div class="field-value" id="d-size"></div></div>
+      <div class="field" id="d-delim-field"><div class="field-label" id="d-delim-label">Detected delimiter</div><div class="field-value field-mono" id="d-delim"></div></div>
+    </div>
+    <hr class="divider">
+    <div class="section-title">Data preview <span style="font-weight:400;color:var(--text-secondary);font-size:13px">(last 3 rows)</span></div>
+    <div class="err-banner" id="preview-err"></div>
+    <div class="table-wrap"><table><thead id="preview-thead"></thead><tbody id="preview-tbody"></tbody></table></div>
+  </div>
+
+  <!-- Schema editor -->
+  <div class="card" id="schema-card" style="display:none">
+    <div class="result-header">
+      <div class="result-icon" style="background:var(--bg-info)">
+        <svg fill="none" viewBox="0 0 18 18"><rect x="2" y="2" width="14" height="14" rx="2" stroke="var(--text-info)" stroke-width="1.5"/><path d="M5 6h8M5 9h8M5 12h5" stroke="var(--text-info)" stroke-width="1.5" stroke-linecap="round"/></svg>
+      </div>
+      <div>
+        <div class="result-title">Define schema</div>
+        <div class="result-sub">Confirm column names, types, and constraints before creating the table</div>
+      </div>
+    </div>
+    <div class="table-name-row">
+      <label for="table-name-input">Target table name</label>
+      <input type="text" id="table-name-input" placeholder="my_table" autocomplete="off" spellcheck="false">
+      <span style="font-size:12px;color:var(--text-tertiary)">dataset schema</span>
+    </div>
+    <div class="warn-banner" id="schema-warnings"></div>
+    <div class="ok-banner"   id="schema-ok">Schema validated — ready to create table.</div>
+    <div class="err-banner"  id="schema-err"></div>
+    <div class="table-wrap" style="margin-top:1rem">
+      <table class="schema-table">
+        <thead><tr>
+          <th>Original name</th><th>New name</th><th>Pandas dtype</th><th>SQL type</th>
+          <th title="Primary key">PK</th><th title="Not null">NOT NULL</th><th title="Unique">UNIQUE</th>
+        </tr></thead>
+        <tbody id="schema-tbody"></tbody>
+      </table>
+    </div>
+    <div class="schema-actions">
+      <button class="btn btn-primary" onclick="submitSchema()">Validate schema</button>
+      <button class="btn btn-success" id="btn-create-table" onclick="createTable()" style="display:none">Create table →</button>
+      <button class="btn" onclick="resetSchema()">Reset</button>
+      <label style="display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer;margin-left:4px">
+        <input type="checkbox" id="overwrite-checkbox" style="width:15px;height:15px;accent-color:var(--text)">
+        Overwrite if exists
+      </label>
+      <span id="schema-spinner" style="display:none"><span class="spinner"></span></span>
+    </div>
+  </div>
+
+  <!-- Create table result -->
+  <div class="card" id="create-result-card" style="display:none">
+    <div class="result-header">
+      <div class="result-icon" id="create-result-icon" style="background:var(--bg-success)">
+        <svg fill="none" viewBox="0 0 18 18"><path d="M3 9.5L7 13.5L15 5" stroke="var(--text-success)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </div>
+      <div>
+        <div class="result-title" id="create-result-title">Table created successfully</div>
+        <div class="result-sub"  id="create-result-sub"></div>
+      </div>
+    </div>
+    <div class="fields" id="create-result-fields"></div>
+    <div class="warn-banner" id="create-warnings" style="margin-top:1rem"></div>
+    <div class="err-banner"  id="create-err"      style="margin-top:1rem"></div>
+  </div>
+
+  <!-- Post-load actions -->
+  <div class="card" id="post-load-card" style="display:none">
+    <div class="result-header">
+      <div class="result-icon" style="background:var(--bg-info)">
+        <svg fill="none" viewBox="0 0 18 18"><path d="M9 3v9M5 8l4 4 4-4" stroke="var(--text-info)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/><path d="M3 15h12" stroke="var(--text-info)" stroke-width="1.5" stroke-linecap="round"/></svg>
+      </div>
+      <div>
+        <div class="result-title">Post-load actions</div>
+        <div class="result-sub" id="post-load-sub">Table ready</div>
+      </div>
+    </div>
+    <div class="section-title" style="margin-bottom:0.75rem">Download table</div>
+    <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:1.5rem">
+      <button class="btn" onclick="downloadTable('csv')"><svg width="14" height="14" fill="none" viewBox="0 0 14 14"><path d="M7 1v8M3 6l4 4 4-4M2 12h10" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/></svg>Download CSV</button>
+      <button class="btn" onclick="downloadTable('xlsx')"><svg width="14" height="14" fill="none" viewBox="0 0 14 14"><path d="M7 1v8M3 6l4 4 4-4M2 12h10" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/></svg>Download XLSX</button>
+    </div>
+    <div class="section-title" style="margin-bottom:0.75rem">Add rows manually</div>
+    <div id="append-form-fields" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:10px;margin-bottom:1rem"></div>
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:1rem;flex-wrap:wrap">
+      <button class="btn btn-primary" onclick="addRowToStaging()">+ Add row</button>
+      <span id="staged-count" style="font-size:13px;color:var(--text-secondary)"></span>
+    </div>
+    <div id="staged-rows-wrap" style="display:none;margin-bottom:1rem">
+      <div style="font-size:13px;font-weight:500;margin-bottom:8px;color:var(--text-secondary)">Rows to insert</div>
+      <div class="table-wrap">
+        <table><thead id="staged-thead"></thead><tbody id="staged-tbody"></tbody></table>
+      </div>
+    </div>
+    <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+      <button class="btn btn-success" id="btn-insert-rows" onclick="insertAllRows()" style="display:none">Insert all rows →</button>
+      <button class="btn" id="btn-clear-staged" onclick="clearStagedRows()" style="display:none">Clear</button>
+      <span id="append-spinner" style="display:none"><span class="spinner"></span></span>
+    </div>
+    <div class="job-status-bar" id="append-job-bar"><span class="spinner"></span><span id="append-job-msg">Working…</span></div>
+    <div class="err-banner" id="append-err" style="margin-top:1rem"></div>
+    <div class="ok-banner"  id="append-ok"  style="margin-top:1rem"></div>
+  </div>
+
+  <!-- Back to top -->
+  <div style="text-align:center;margin-bottom:1.5rem;display:none" id="back-to-top-wrap">
+    <button class="btn" onclick="window.scrollTo({top:0,behavior:'smooth'})">↑ Back to top</button>
+  </div>
+
+  <!-- History -->
+  <div class="card">
+    <div class="section-title">Upload history</div>
+    <div class="history-empty" id="history-empty">No uploads yet this session</div>
+    <div class="history-list" id="history-list"></div>
+  </div>
+</div>
+
+<script>
+  const API = 'http://127.0.0.1:8000';
+  const dropZone     = document.getElementById('drop-zone');
+  const fileInput    = document.getElementById('file-input');
+  const progressWrap = document.getElementById('progress-wrap');
+  const progressFill = document.getElementById('progress-fill');
+  const progressLabel= document.getElementById('progress-label');
+  const uploadErr    = document.getElementById('upload-err');
+  const detailsCard  = document.getElementById('details-card');
+  const schemaCard   = document.getElementById('schema-card');
+  const historyList  = document.getElementById('history-list');
+  const historyEmpty = document.getElementById('history-empty');
+
+  let uploadCount = 0, totalBytes = 0;
+  let currentId        = null;
+  let currentTableName = null;
+  let inferredSchema   = null;
+  let stagedRows       = [];
+  let tableColSchema   = [];
+
+  const MIME_MAP = {
+    'text/csv':'CSV',
+    'application/vnd.ms-excel':'XLS',
+    'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet':'XLSX',
+  };
+  const SQL_TYPES = ['TEXT','VARCHAR(255)','INTEGER','BIGINT','SMALLINT','NUMERIC','FLOAT','BOOLEAN','DATE','TIMESTAMP','TIMESTAMPTZ','UUID','JSONB','BYTEA'];
+
+  // ── utils ──
+  function fmtSize(b) {
+    if (b < 1024) return b + ' B';
+    if (b < 1024*1024) return Math.round(b/1024) + ' KB';
+    return (b/(1024*1024)).toFixed(1) + ' MB';
+  }
+  function fmtTime(d) { return d.toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'}); }
+  function fileExt(n) { return (n.split('.').pop()||'').toLowerCase(); }
+  function showEl(el, d='block') { el.style.display = d; }
+  function hideEl(el) { el.style.display = 'none'; }
+  function showErr(el, msg) { el.textContent = msg; el.style.whiteSpace = 'pre-line'; showEl(el); }
+  function hideErr(el) { hideEl(el); }
+
+  function setStep(n) {
+    [1,2,3,4].forEach(i => {
+      const el = document.getElementById('step-'+i);
+      el.classList.remove('active','done');
+      if (i < n) el.classList.add('done');
+      else if (i === n) el.classList.add('active');
+    });
+  }
+
+  function updateStats() {
+    document.getElementById('stat-count').textContent = uploadCount;
+    const s = totalBytes;
+    if (s < 1024) document.getElementById('stat-size').innerHTML = s + ' <span>B</span>';
+    else if (s < 1024*1024) document.getElementById('stat-size').innerHTML = Math.round(s/1024) + ' <span>KB</span>';
+    else document.getElementById('stat-size').innerHTML = (s/(1024*1024)).toFixed(1) + ' <span>MB</span>';
+  }
+
+  // ── job polling ──
+  async function pollJob(jobId, onSuccess, onFailure, statusEl) {
+    const check = async () => {
+      try {
+        const res = await fetch(`${API}/job-status/${jobId}`);
+        const job = await res.json();
+        if (statusEl) statusEl.textContent = `Status: ${job.status}…`;
+        if (job.status === 'success') { onSuccess(job.result); }
+        else if (job.status === 'failed') { onFailure(job.message || 'Job failed.'); }
+        else { setTimeout(check, 2000); }
+      } catch(e) { onFailure('Lost connection while polling job status.'); }
+    };
+    setTimeout(check, 800);
+  }
+
+  // ── preview ──
+  function renderPreview(details) {
+    const cols = details.columns||[], rows = details.preview_rows||[];
+    document.getElementById('preview-thead').innerHTML = '<tr>' + cols.map(c=>`<th>${c}</th>`).join('') + '</tr>';
+    document.getElementById('preview-tbody').innerHTML = rows.map(row =>
+      '<tr>' + cols.map(c => {
+        const v = row[c];
+        return (v===null||v===undefined||v==='') ? '<td class="null-cell">null</td>' : `<td>${String(v)}</td>`;
+      }).join('') + '</tr>'
+    ).join('');
+  }
+
+  // ── file details ──
+  function showDetails(details) {
+    document.getElementById('details-title').textContent = details.filename;
+    document.getElementById('details-sub').textContent   = 'Staged at ' + fmtTime(new Date());
+    document.getElementById('d-id').textContent          = details.staging_file_id;
+    document.getElementById('d-filename').textContent    = details.filename;
+    document.getElementById('d-ct').textContent          = MIME_MAP[details.content_type] || details.content_type;
+    document.getElementById('d-size').textContent        = fmtSize(details.size_bytes);
+    const delimLabel = document.getElementById('d-delim-label');
+    const delimVal   = document.getElementById('d-delim');
+    if (details.detected_delimiter !== null && details.detected_delimiter !== undefined) {
+      delimLabel.textContent = 'Detected delimiter';
+      const d = details.detected_delimiter;
+      delimVal.textContent = d==='\t'?'\\t (tab)':d===','?', (comma)':d===';'?'; (semicolon)':d==='|'?'| (pipe)':d;
+    } else {
+      delimLabel.textContent = 'Excel extension';
+      delimVal.textContent   = details.extension || '';
+    }
+    renderPreview(details);
+    showEl(detailsCard);
+    setStep(2);
+    loadSchemaEditor();
+  }
+
+  // ── schema editor ──
+  function buildSchemaRow(col, idx) {
+    const sqlOptions = SQL_TYPES.map(t => `<option value="${t}" ${t===col.sql_type?'selected':''}>${t}</option>`).join('');
+    return `<tr data-idx="${idx}">
+      <td><span class="orig-name">${col.original_name}</span></td>
+      <td><input type="text" class="col-new-name" value="${col.new_name}" spellcheck="false" autocomplete="off"></td>
+      <td><span class="dtype-pill">${col.pandas_dtype}</span></td>
+      <td><select class="col-sql-type">${sqlOptions}</select></td>
+      <td style="text-align:center"><input type="checkbox" class="col-pk" ${col.is_pk?'checked':''} onchange="onPkChange(this,${idx})"></td>
+      <td style="text-align:center"><input type="checkbox" class="col-not-null" ${col.not_null?'checked':''}></td>
+      <td style="text-align:center"><input type="checkbox" class="col-unique" ${col.unique?'checked':''}></td>
+    </tr>`;
+  }
+
+  function onPkChange(checkbox, idx) {
+    if (checkbox.checked) {
+      document.querySelectorAll('#schema-tbody tr').forEach(row => {
+        const rowIdx = parseInt(row.getAttribute('data-idx'));
+        if (rowIdx === idx) return;
+        const pkCb = row.querySelector('.col-pk');
+        if (pkCb && pkCb.checked) {
+          pkCb.checked = false;
+          row.querySelector('.col-not-null').checked  = false;
+          row.querySelector('.col-not-null').disabled = false;
+          row.querySelector('.col-unique').checked    = false;
+          row.querySelector('.col-unique').disabled   = false;
+        }
+      });
+    }
+    const row     = document.querySelector(`tr[data-idx="${idx}"]`);
+    const notNull = row.querySelector('.col-not-null');
+    const unique  = row.querySelector('.col-unique');
+    if (checkbox.checked) {
+      notNull.checked = true; notNull.disabled = true;
+      unique.checked  = false; unique.disabled  = true;
+    } else {
+      notNull.checked = false; notNull.disabled = false;
+      unique.checked  = false; unique.disabled  = false;
+    }
+  }
+
+  async function loadSchemaEditor() {
+    hideEl(schemaCard);
+    hideErr(document.getElementById('schema-err'));
+    hideEl(document.getElementById('schema-warnings'));
+    hideEl(document.getElementById('schema-ok'));
+    try {
+      const res = await fetch(`${API}/infer-schema/${currentId}`);
+      if (!res.ok) throw new Error('Failed to infer schema');
+      const schema = await res.json();
+      inferredSchema = schema;
+      renderSchemaEditor(schema);
+      showEl(schemaCard);
+      setStep(3);
+    } catch(e) {
+      showErr(document.getElementById('schema-err'), e.message);
+    }
+  }
+
+  function renderSchemaEditor(schema) {
+    document.getElementById('table-name-input').value = schema.table_name;
+    document.getElementById('table-name-input').classList.remove('invalid');
+    document.getElementById('schema-tbody').innerHTML = schema.columns.map((col, i) => buildSchemaRow(col, i)).join('');
+    schema.columns.forEach((col, i) => {
+      if (col.is_pk) {
+        const row = document.querySelector(`tr[data-idx="${i}"]`);
+        if (row) {
+          row.querySelector('.col-not-null').disabled = true;
+          row.querySelector('.col-unique').disabled   = true;
+        }
+      }
+    });
+  }
+
+  function resetSchema() {
+    if (inferredSchema) renderSchemaEditor(inferredSchema);
+    hideEl(document.getElementById('schema-warnings'));
+    hideEl(document.getElementById('schema-ok'));
+    hideErr(document.getElementById('schema-err'));
+    hideEl(document.getElementById('btn-create-table'));
+    hideEl(document.getElementById('create-result-card'));
+  }
+
+  function collectSchema() {
+    const tableName = document.getElementById('table-name-input').value.trim();
+    const rows = document.querySelectorAll('#schema-tbody tr');
+    const columns = Array.from(rows).map((row, i) => ({
+      original_name: inferredSchema.columns[i].original_name,
+      new_name:      row.querySelector('.col-new-name').value.trim(),
+      pandas_dtype:  inferredSchema.columns[i].pandas_dtype,
+      sql_type:      row.querySelector('.col-sql-type').value,
+      is_pk:         row.querySelector('.col-pk').checked,
+      not_null:      row.querySelector('.col-not-null').checked,
+      unique:        row.querySelector('.col-unique').checked,
+    }));
+    return { table_name: tableName, columns };
+  }
+
+  async function submitSchema() {
+    const spinner = document.getElementById('schema-spinner');
+    const warnEl  = document.getElementById('schema-warnings');
+    const okEl    = document.getElementById('schema-ok');
+    const errEl   = document.getElementById('schema-err');
+    hideEl(warnEl); hideEl(okEl); hideErr(errEl);
+    document.getElementById('table-name-input').classList.remove('invalid');
+    const payload = collectSchema();
+    if (!/^[a-z_][a-z0-9_]{0,62}$/.test(payload.table_name)) {
+      document.getElementById('table-name-input').classList.add('invalid');
+      showErr(errEl, 'Table name is invalid. Use lowercase letters, digits, underscores only.');
+      return;
+    }
+    showEl(spinner, 'inline-block');
+    try {
+      const res  = await fetch(`${API}/define-schema/${currentId}`, {
+        method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(payload),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        let msg = 'Validation failed.';
+        if (data.detail) {
+          msg = Array.isArray(data.detail)
+            ? data.detail.map(e => { const loc = e.loc ? e.loc.slice(1).join(' → ') : ''; return loc ? `${loc}: ${e.msg}` : e.msg; }).join('\n')
+            : data.detail;
+        }
+        showErr(errEl, msg); return;
+      }
+      data.columns.forEach((col, i) => {
+        const row = document.querySelector(`tr[data-idx="${i}"]`);
+        if (row) row.querySelector('.col-new-name').value = col.new_name;
+      });
+      if (data.warnings && data.warnings.length > 0) {
+        warnEl.innerHTML = '<strong>Warnings</strong><ul>' + data.warnings.map(w=>`<li>${w}</li>`).join('') + '</ul>';
+        showEl(warnEl);
+      }
+      showEl(okEl);
+      showEl(document.getElementById('btn-create-table'), 'inline-flex');
+    } catch(e) {
+      showErr(errEl, 'Could not reach the API: ' + e.message);
+    } finally {
+      hideEl(spinner);
+    }
+  }
+
+  // ── create table (with job polling) ──
+  async function createTable() {
+    const spinner    = document.getElementById('schema-spinner');
+    const resultCard = document.getElementById('create-result-card');
+    const warnEl     = document.getElementById('create-warnings');
+    const errEl      = document.getElementById('create-err');
+    const fieldsEl   = document.getElementById('create-result-fields');
+    const iconEl     = document.getElementById('create-result-icon');
+    const titleEl    = document.getElementById('create-result-title');
+    const subEl      = document.getElementById('create-result-sub');
+
+    hideEl(warnEl); hideErr(errEl);
+    showEl(spinner, 'inline-block');
+
+    const payload = collectSchema();
+    payload.overwrite = document.getElementById('overwrite-checkbox').checked;
+
+    // Show queued state
+    titleEl.textContent = 'Job queued…';
+    subEl.textContent   = 'Working in background';
+    iconEl.style.background = 'var(--bg-info)';
+    iconEl.innerHTML = '<span class="spinner"></span>';
+    fieldsEl.innerHTML = '';
+    showEl(resultCard);
+
+    try {
+      const res  = await fetch(`${API}/create-table/${currentId}`, {
+        method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(payload),
+      });
+      const data = await res.json();
+
+      if (!res.ok) {
+        let msg = data.detail || 'Failed to queue job.';
+        if (res.status === 409) {
+          document.getElementById('overwrite-checkbox').checked = true;
+          msg += ' — "Overwrite if exists" has been checked for you. Click Create table again.';
+        }
+        showErr(errEl, msg);
+        titleEl.textContent = 'Table creation failed';
+        iconEl.style.background = 'var(--bg-danger)';
+        iconEl.innerHTML = '<svg fill="none" viewBox="0 0 18 18"><path d="M4 4l10 10M14 4L4 14" stroke="var(--text-danger)" stroke-width="1.5" stroke-linecap="round"/></svg>';
+        hideEl(spinner);
+        return;
+      }
+
+      subEl.textContent = 'Status: running…';
+
+      pollJob(
+        data.job_id,
+        (result) => {
+          hideEl(spinner);
+          titleEl.textContent = 'Table created successfully';
+          subEl.textContent   = (payload.overwrite ? 'Overwrote existing table · ' : '') + `Loaded at ${fmtTime(new Date())}`;
+          iconEl.style.background = 'var(--bg-success)';
+          iconEl.innerHTML = '<svg fill="none" viewBox="0 0 18 18"><path d="M3 9.5L7 13.5L15 5" stroke="var(--text-success)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+          fieldsEl.innerHTML = `
+            <div class="field field-full"><div class="field-label">Table name</div><div class="field-value field-mono">${result.full_table_name}</div></div>
+            <div class="field"><div class="field-label">Rows loaded</div><div class="field-value">${result.rows_loaded.toLocaleString()}</div></div>
+            <div class="field"><div class="field-label">Status</div><div class="field-value"><span class="badge badge-success">loaded</span></div></div>
+          `;
+          if (result.warnings && result.warnings.length > 0) {
+            warnEl.innerHTML = '<strong>Warnings</strong><ul>' + result.warnings.map(w=>`<li>${w}</li>`).join('') + '</ul>';
+            showEl(warnEl);
+          }
+          setStep(4);
+          currentTableName = result.table_name;
+          document.getElementById('post-load-sub').textContent = `dataset.${result.table_name} · ${result.rows_loaded.toLocaleString()} rows`;
+          stagedRows = [];
+          buildAppendForm(payload.columns.map(c => ({ name: c.new_name, sql_type: c.sql_type })));
+          showEl(document.getElementById('post-load-card'));
+          showEl(document.getElementById('back-to-top-wrap'));
+        },
+        (msg) => {
+          hideEl(spinner);
+          showErr(errEl, msg);
+          titleEl.textContent = 'Table creation failed';
+          iconEl.style.background = 'var(--bg-danger)';
+          iconEl.innerHTML = '<svg fill="none" viewBox="0 0 18 18"><path d="M4 4l10 10M14 4L4 14" stroke="var(--text-danger)" stroke-width="1.5" stroke-linecap="round"/></svg>';
+        },
+        subEl,
+      );
+    } catch(e) {
+      hideEl(spinner);
+      showErr(errEl, 'Could not reach the API: ' + e.message);
+    }
+  }
+
+  // ── fetch file details ──
+  async function fetchDetails(id) {
+    const res = await fetch(`${API}/file-details/${id}`);
+    if (!res.ok) {
+      const err = await res.json().catch(()=>({detail:'Failed to load details'}));
+      throw new Error(err.detail || 'Failed to load details');
+    }
+    return res.json();
+  }
+
+  // ── history ──
+  function addHistory(details) {
+    historyEmpty.style.display = 'none';
+    const ext = fileExt(details.filename);
+    const cls = ['csv','xls','xlsx'].includes(ext) ? 'file-'+ext : 'file-other';
+    const item = document.createElement('div');
+    item.className = 'history-item';
+    item.innerHTML = `
+      <div class="file-icon ${cls}">${ext.toUpperCase()}</div>
+      <div class="history-name">${details.filename}</div>
+      <div class="history-meta">${fmtSize(details.size_bytes)}</div>
+      <div class="history-meta" style="margin-left:8px">${fmtTime(new Date())}</div>
+      <span class="badge badge-success" style="margin-left:8px">ok</span>
+    `;
+    item.addEventListener('click', async () => {
+      currentId = details.staging_file_id;
+      hideEl(schemaCard);
+      try { showDetails(await fetchDetails(currentId)); } catch(e) { alert(e.message); }
+    });
+    historyList.insertBefore(item, historyList.firstChild);
+  }
+
+  // ── upload ──
+  async function doUpload(file) {
+    hideErr(uploadErr);
+    hideEl(detailsCard); hideEl(schemaCard);
+    hideEl(document.getElementById('create-result-card'));
+    hideEl(document.getElementById('post-load-card'));
+    hideEl(document.getElementById('back-to-top-wrap'));
+    hideEl(document.getElementById('btn-create-table'));
+    currentTableName = null; stagedRows = []; tableColSchema = [];
+    showEl(progressWrap);
+    progressFill.style.width = '0%';
+    progressLabel.textContent = 'Uploading ' + file.name + '...';
+    setStep(1);
+
+    let prog = 0;
+    const ticker = setInterval(() => {
+      prog = Math.min(prog + Math.random()*18, 80);
+      progressFill.style.width = prog + '%';
+    }, 120);
+
+    const form = new FormData();
+    form.append('file', file);
+
+    try {
+      const res = await fetch(API + '/upload', {method:'POST', body:form});
+      clearInterval(ticker);
+      if (!res.ok) {
+        const err = await res.json().catch(()=>({detail:'Upload failed'}));
+        hideEl(progressWrap);
+        showErr(uploadErr, err.detail || 'Upload failed with status ' + res.status);
+        return;
+      }
+      progressFill.style.width = '90%';
+      progressLabel.textContent = 'Fetching file details...';
+      const uploadData = await res.json();
+      currentId = uploadData.staging_file_id;
+      const details = await fetchDetails(currentId);
+      progressFill.style.width = '100%';
+      setTimeout(() => {
+        hideEl(progressWrap);
+        uploadCount++; totalBytes += uploadData.size_bytes;
+        document.getElementById('stat-last').textContent = fmtTime(new Date());
+        updateStats();
+        showDetails(details);
+        addHistory(details);
+      }, 250);
+    } catch(e) {
+      clearInterval(ticker);
+      hideEl(progressWrap);
+      showErr(uploadErr, e.message.includes('fetch') ? 'Could not reach the API. Is the server running at ' + API + '?' : e.message);
+    }
+  }
+
+  // ── download ──
+  function downloadTable(fmt) {
+    if (!currentTableName) return;
+    window.location.href = `${API}/download/${currentTableName}?fmt=${fmt}`;
+  }
+
+  // ── manual row entry ──
+  const TYPE_PLACEHOLDERS = {
+    'BIGINT':'0','INTEGER':'0','SMALLINT':'0','FLOAT':'0.0','NUMERIC':'0.0',
+    'BOOLEAN':'true / false','TEXT':'text','VARCHAR(255)':'text',
+    'DATE':'2024-01-01','TIMESTAMP':'2024-01-01 00:00:00','TIMESTAMPTZ':'2024-01-01 00:00:00',
+    'UUID':'xxxxxxxx-xxxx-...','JSONB':'{}','BYTEA':'',
+  };
+  const TYPE_VALIDATORS = {
+    'BIGINT':v => /^-?\d+$/.test(v.trim()), 'INTEGER':v => /^-?\d+$/.test(v.trim()), 'SMALLINT':v => /^-?\d+$/.test(v.trim()),
+    'FLOAT':v => !isNaN(parseFloat(v)), 'NUMERIC':v => !isNaN(parseFloat(v)),
+    'BOOLEAN':v => ['true','false','1','0','yes','no'].includes(v.trim().toLowerCase()),
+  };
+
+  function buildAppendForm(schema) {
+    tableColSchema = schema;
+    document.getElementById('append-form-fields').innerHTML = schema.map(col => `
+      <div>
+        <div style="font-size:11px;color:var(--text-tertiary);text-transform:uppercase;letter-spacing:0.04em;margin-bottom:4px">
+          ${col.name} <span style="font-family:var(--font-mono);font-size:10px;background:var(--bg-secondary);padding:1px 5px;border-radius:4px">${col.sql_type}</span>
+        </div>
+        <input type="text" id="append-field-${col.name}" placeholder="${TYPE_PLACEHOLDERS[col.sql_type]||''}"
+          autocomplete="off" spellcheck="false"
+          style="width:100%;padding:6px 10px;font-size:13px;font-family:var(--font-mono);border:0.5px solid var(--border-md);border-radius:var(--radius-md);background:var(--bg-secondary);color:var(--text)">
+      </div>
+    `).join('');
+  }
+
+  function addRowToStaging() {
+    const row = {};
+    let hasError = false;
+    for (const col of tableColSchema) {
+      const input = document.getElementById(`append-field-${col.name}`);
+      const val   = input ? input.value.trim() : '';
+      if (val !== '') {
+        const validator = TYPE_VALIDATORS[col.sql_type];
+        if (validator && !validator(val)) {
+          if (input) { input.style.borderColor = 'var(--text-danger)'; input.style.background = 'var(--bg-danger)'; }
+          hasError = true; continue;
+        }
+      }
+      if (input) { input.style.borderColor = ''; input.style.background = ''; }
+      row[col.name] = val === '' ? null : val;
+    }
+    if (hasError) { showErr(document.getElementById('append-err'), 'Some values have incorrect types — highlighted in red.'); return; }
+    hideErr(document.getElementById('append-err'));
+    stagedRows.push(row);
+    renderStagedRows();
+    tableColSchema.forEach(col => { const i = document.getElementById(`append-field-${col.name}`); if (i) i.value = ''; });
+    const first = document.getElementById(`append-field-${tableColSchema[0]?.name}`);
+    if (first) first.focus();
+  }
+
+  function renderStagedRows() {
+    const wrap  = document.getElementById('staged-rows-wrap');
+    const count = document.getElementById('staged-count');
+    const btnI  = document.getElementById('btn-insert-rows');
+    const btnC  = document.getElementById('btn-clear-staged');
+    if (stagedRows.length === 0) { hideEl(wrap); hideEl(btnI); hideEl(btnC); count.textContent = ''; return; }
+    const cols = tableColSchema.map(c => c.name);
+    document.getElementById('staged-thead').innerHTML = '<tr>' + cols.map(c=>`<th>${c}</th>`).join('') + '<th></th></tr>';
+    document.getElementById('staged-tbody').innerHTML = stagedRows.map((row, i) =>
+      '<tr>' + cols.map(c => `<td>${row[c]===null?'<span class="null-cell">null</span>':row[c]}</td>`).join('') +
+      `<td><button onclick="removeRow(${i})" style="font-size:11px;background:none;border:none;color:var(--text-danger);cursor:pointer">✕</button></td></tr>`
+    ).join('');
+    count.textContent = `${stagedRows.length} row${stagedRows.length>1?'s':''} staged`;
+    showEl(wrap); showEl(btnI,'inline-flex'); showEl(btnC,'inline-flex');
+  }
+
+  function removeRow(idx) { stagedRows.splice(idx, 1); renderStagedRows(); }
+
+  function clearStagedRows() {
+    stagedRows = [];
+    renderStagedRows();
+    hideEl(document.getElementById('append-ok'));
+    hideErr(document.getElementById('append-err'));
+  }
+
+  // ── insert rows (with job polling) ──
+  async function insertAllRows() {
+    if (!currentTableName || stagedRows.length === 0) return;
+    const spinner = document.getElementById('append-spinner');
+    const errEl   = document.getElementById('append-err');
+    const okEl    = document.getElementById('append-ok');
+    const jobBar  = document.getElementById('append-job-bar');
+    const jobMsg  = document.getElementById('append-job-msg');
+
+    hideErr(errEl); hideEl(okEl); hideEl(jobBar);
+    showEl(spinner, 'inline-block');
+
+    try {
+      const res  = await fetch(`${API}/append/${currentTableName}`, {
+        method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({rows:stagedRows}),
+      });
+      const data = await res.json();
+      if (!res.ok) { showErr(errEl, data.detail||'Insert failed.'); hideEl(spinner); return; }
+
+      hideEl(spinner);
+      jobMsg.textContent = 'Inserting rows…';
+      showEl(jobBar, 'flex');
+
+      pollJob(
+        data.job_id,
+        (result) => {
+          hideEl(jobBar);
+          okEl.textContent = `✓ ${result.rows_inserted.toLocaleString()} row${result.rows_inserted>1?'s':''} inserted into ${result.table_name}.`;
+          showEl(okEl);
+          stagedRows = [];
+          renderStagedRows();
+        },
+        (msg) => {
+          hideEl(jobBar);
+          showErr(errEl, msg);
+        },
+        jobMsg,
+      );
+    } catch(e) {
+      hideEl(spinner);
+      showErr(errEl, 'Could not reach the API: ' + e.message);
+    }
+  }
+
+  // ── event listeners ──
+  fileInput.addEventListener('change', e => { if (e.target.files[0]) doUpload(e.target.files[0]); });
+  dropZone.addEventListener('dragover',  e => { e.preventDefault(); dropZone.classList.add('drag'); });
+  dropZone.addEventListener('dragleave', ()  => dropZone.classList.remove('drag'));
+  dropZone.addEventListener('drop', e => {
+    e.preventDefault(); dropZone.classList.remove('drag');
+    if (e.dataTransfer.files[0]) doUpload(e.dataTransfer.files[0]);
+  });
+</script>
+</body>
+</html>
