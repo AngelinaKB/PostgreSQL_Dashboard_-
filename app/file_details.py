@@ -64,28 +64,41 @@ def _sniff_delimiter(raw: bytes) -> str:
 
 
 def _parse_csv(raw: bytes, delimiter: str) -> tuple[list[str], list[dict]]:
+    # First pass: count total rows cheaply
+    buf = io.BytesIO(raw)
+    total = sum(1 for _ in buf) - 1  # subtract header
+    skip = max(0, total - PREVIEW_ROWS)
+
+    # Second pass: read only the last PREVIEW_ROWS rows
     df = pd.read_csv(
         io.BytesIO(raw),
         sep=delimiter,
         dtype=str,
         keep_default_na=False,
         encoding="utf-8",
+        skiprows=range(1, skip + 1) if skip > 0 else None,
     )
     df.columns = [str(c).strip() for c in df.columns]
-    df = df.tail(PREVIEW_ROWS)
     rows = df.where(pd.notnull(df), None).to_dict(orient="records")
     return list(df.columns), rows
 
 
 def _parse_excel(raw: bytes, ext: str) -> tuple[list[str], list[dict]]:
     engine = "openpyxl" if ext == ".xlsx" else "xlrd"
+    # Read full file to get row count, then slice tail
+    # Excel has no cheap line-count — read with nrows=None but minimal cols
+    df_full = pd.read_excel(io.BytesIO(raw), engine=engine, dtype=str, usecols=[0])
+    total = len(df_full)
+    skip = max(0, total - PREVIEW_ROWS)
+
     df = pd.read_excel(
         io.BytesIO(raw),
         engine=engine,
         dtype=str,
+        skiprows=range(1, skip + 1) if skip > 0 else None,
+        header=0,
     )
     df.columns = [str(c).strip() for c in df.columns]
-    df = df.tail(PREVIEW_ROWS)
     rows = df.where(pd.notnull(df), None).to_dict(orient="records")
     return list(df.columns), rows
 
@@ -145,10 +158,25 @@ async def get_file_details(
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
                             detail="Invalid file ID format.")
 
-    record: StagingFile | None = await db.get(StagingFile, uid)
+    from sqlalchemy import select
+    stmt = select(
+        StagingFile.id, StagingFile.filename, StagingFile.content_type,
+        StagingFile.size_bytes, StagingFile.file_bytes,
+        StagingFile.status,
+    ).where(StagingFile.id == uid)
+    result = await db.execute(stmt)
+    record = result.fetchone()
     if record is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND,
                             detail=f"File '{file_id}' not found.")
+    # Map to object-like access
+    class _R:
+        pass
+    r = _R()
+    r.filename, r.content_type, r.size_bytes, r.file_bytes = (
+        record.filename, record.content_type, record.size_bytes, record.file_bytes
+    )
+    record = r
 
     # 2. Parse in thread pool (pandas is CPU-bound / sync)
     loop = asyncio.get_running_loop()
@@ -157,7 +185,7 @@ async def get_file_details(
             None,
             partial(
                 _do_parse,
-                bytes(record.file_bytes),
+                record.file_bytes,
                 record.content_type,
                 record.filename,
                 None,
