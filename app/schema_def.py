@@ -230,10 +230,10 @@ async def define_schema(
                     delimiter = dialect.delimiter
                 except _csv.Error:
                     delimiter = ","
-                df = pd.read_csv(io.BytesIO(raw), sep=delimiter, dtype=str, keep_default_na=False, encoding="utf-8")
+                df = pd.read_csv(io.BytesIO(raw), sep=delimiter, encoding="utf-8", nrows=500)
             else:
                 engine = "openpyxl" if ext == ".xlsx" else "xlrd"
-                df = pd.read_excel(io.BytesIO(raw), engine=engine, dtype=str)
+                df = pd.read_excel(io.BytesIO(raw), engine=engine, nrows=500)
 
             df.columns = [str(c).strip() for c in df.columns]
             if col_original not in df.columns:
