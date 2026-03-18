@@ -222,10 +222,20 @@
         <div class="result-sub">Confirm column names, types, and constraints before creating the table</div>
       </div>
     </div>
+    <div class="table-name-row" style="flex-wrap:wrap;gap:10px;margin-bottom:0.75rem">
+      <label style="font-size:13px;font-weight:500;white-space:nowrap">Target database</label>
+      <select id="db-select" style="font-size:13px;padding:7px 10px;border:0.5px solid var(--border-md);border-radius:var(--radius-md);background:var(--bg);color:var(--text);min-width:160px">
+        <option value="">Loading…</option>
+      </select>
+      <label style="font-size:13px;font-weight:500;white-space:nowrap">Schema</label>
+      <select id="schema-select" style="font-size:13px;padding:7px 10px;border:0.5px solid var(--border-md);border-radius:var(--radius-md);background:var(--bg);color:var(--text);min-width:160px">
+        <option value="">— pick a database first —</option>
+      </select>
+      <span id="db-spinner" style="display:none"><span class="spinner"></span></span>
+    </div>
     <div class="table-name-row">
-      <label for="table-name-input">Target table name</label>
+      <label for="table-name-input">Table name</label>
       <input type="text" id="table-name-input" placeholder="my_table" autocomplete="off" spellcheck="false">
-      <span style="font-size:12px;color:var(--text-tertiary)">dataset schema</span>
     </div>
     <div class="warn-banner" id="schema-warnings"></div>
     <div class="ok-banner"   id="schema-ok">Schema validated — ready to create table.</div>
@@ -334,6 +344,8 @@
   let uploadCount = 0, totalBytes = 0;
   let currentId        = null;
   let currentTableName = null;
+  let currentTargetDb     = null;
+  let currentTargetSchema = null;
   let inferredSchema   = null;
   let stagedRows       = [];
   let tableColSchema   = [];
@@ -467,6 +479,41 @@
     }
   }
 
+  // ── database / schema discovery ──
+  async function loadDatabases() {
+    const dbSel     = document.getElementById('db-select');
+    const schemaSel = document.getElementById('schema-select');
+    const spinner   = document.getElementById('db-spinner');
+    showEl(spinner, 'inline-block');
+    try {
+      const res  = await fetch(`${API}/databases`);
+      const dbs  = await res.json();
+      dbSel.innerHTML = dbs.map(d => `<option value="${d}">${d}</option>`).join('');
+      // Auto-load schemas for the first db
+      if (dbs.length > 0) await loadSchemas(dbs[0]);
+    } catch(e) {
+      dbSel.innerHTML = '<option value="">Failed to load</option>';
+    } finally {
+      hideEl(spinner);
+    }
+  }
+
+  async function loadSchemas(database) {
+    const schemaSel = document.getElementById('schema-select');
+    const spinner   = document.getElementById('db-spinner');
+    showEl(spinner, 'inline-block');
+    schemaSel.innerHTML = '<option value="">Loading…</option>';
+    try {
+      const res     = await fetch(`${API}/schemas/${database}`);
+      const schemas = await res.json();
+      schemaSel.innerHTML = schemas.map(s => `<option value="${s}">${s}</option>`).join('');
+    } catch(e) {
+      schemaSel.innerHTML = '<option value="">Failed to load</option>';
+    } finally {
+      hideEl(spinner);
+    }
+  }
+
   async function loadSchemaEditor() {
     hideEl(schemaCard);
     hideErr(document.getElementById('schema-err'));
@@ -480,6 +527,8 @@
       renderSchemaEditor(schema);
       showEl(schemaCard);
       setStep(3);
+      // Load available databases + schemas
+      loadDatabases();
     } catch(e) {
       showErr(document.getElementById('schema-err'), e.message);
     }
@@ -511,6 +560,8 @@
 
   function collectSchema() {
     const tableName = document.getElementById('table-name-input').value.trim();
+    const targetDb  = document.getElementById('db-select').value;
+    const targetSch = document.getElementById('schema-select').value;
     const rows = document.querySelectorAll('#schema-tbody tr');
     const columns = Array.from(rows).map((row, i) => ({
       original_name: inferredSchema.columns[i].original_name,
@@ -521,7 +572,7 @@
       not_null:      row.querySelector('.col-not-null').checked,
       unique:        row.querySelector('.col-unique').checked,
     }));
-    return { table_name: tableName, columns };
+    return { table_name: tableName, columns, target_database: targetDb, target_schema: targetSch };
   }
 
   async function submitSchema() {
@@ -634,8 +685,11 @@
             showEl(warnEl);
           }
           setStep(4);
-          currentTableName = result.table_name;
-          document.getElementById('post-load-sub').textContent = `dataset.${result.table_name} · ${result.rows_loaded.toLocaleString()} rows`;
+          currentTableName    = result.table_name;
+          currentTargetDb     = result.target_database || payload.target_database;
+          currentTargetSchema = result.target_schema   || payload.target_schema;
+          document.getElementById('post-load-sub').textContent =
+            `${currentTargetDb} › ${currentTargetSchema}.${result.table_name} · ${result.rows_loaded.toLocaleString()} rows`;
           stagedRows = [];
           buildAppendForm(payload.columns.map(c => ({ name: c.new_name, sql_type: c.sql_type })));
           showEl(document.getElementById('post-load-card'));
@@ -696,7 +750,7 @@
     hideEl(document.getElementById('post-load-card'));
     hideEl(document.getElementById('back-to-top-wrap'));
     hideEl(document.getElementById('btn-create-table'));
-    currentTableName = null; stagedRows = []; tableColSchema = [];
+    currentTableName = null; currentTargetDb = null; currentTargetSchema = null; stagedRows = []; tableColSchema = [];
     showEl(progressWrap);
     progressFill.style.width = '0%';
     progressLabel.textContent = 'Uploading ' + file.name + '...';
@@ -744,7 +798,9 @@
   // ── download ──
   function downloadTable(fmt) {
     if (!currentTableName) return;
-    window.location.href = `${API}/download/${currentTableName}?fmt=${fmt}`;
+    const db  = document.getElementById('db-select')?.value   || currentTargetDb;
+    const sch = document.getElementById('schema-select')?.value || currentTargetSchema;
+    window.location.href = `${API}/download/${db}/${sch}/${currentTableName}?fmt=${fmt}`;
   }
 
   // ── manual row entry ──
@@ -837,7 +893,7 @@
     showEl(spinner, 'inline-block');
 
     try {
-      const res  = await fetch(`${API}/append/${currentTableName}`, {
+      const res  = await fetch(`${API}/append/${currentTargetDb}/${currentTargetSchema}/${currentTableName}`, {
         method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({rows:stagedRows}),
       });
       const data = await res.json();
@@ -875,6 +931,11 @@
   dropZone.addEventListener('drop', e => {
     e.preventDefault(); dropZone.classList.remove('drag');
     if (e.dataTransfer.files[0]) doUpload(e.dataTransfer.files[0]);
+  });
+
+  // When user picks a different database, reload schemas
+  document.addEventListener('change', e => {
+    if (e.target.id === 'db-select') loadSchemas(e.target.value);
   });
 </script>
 </body>
