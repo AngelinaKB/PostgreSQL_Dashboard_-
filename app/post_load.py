@@ -248,7 +248,7 @@ def _insert_rows(table_name: str, col_names: list[str], rows: list[tuple], targe
             cur.execute(f"SELECT pg_advisory_xact_lock({lock_id})")
             col_list     = ", ".join(f'"{c}"' for c in col_names)
             placeholders = ", ".join(["%s"] * len(col_names))
-            insert_sql   = f'INSERT INTO dataset."{table_name}" ({col_list}) VALUES ({placeholders})'
+            insert_sql   = f'INSERT INTO "{target_schema}"."{table_name}" ({col_list}) VALUES ({placeholders})'
             for i in range(0, len(rows), BATCH_SIZE):
                 psycopg2.extras.execute_batch(cur, insert_sql, rows[i:i+BATCH_SIZE])
         conn.commit()
@@ -292,3 +292,4 @@ async def download_table(
             media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
             headers={"Content-Disposition": f'attachment; filename="{filename}"'},
         )
+
