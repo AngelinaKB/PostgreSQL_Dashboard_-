@@ -50,6 +50,7 @@ BATCH_SIZE = 500
 # ---------------------------------------------------------------------------
 
 class ColumnInput(BaseModel):
+    original_name: str = ""
     new_name: str
     sql_type: str
     is_pk:    bool = False
@@ -295,7 +296,14 @@ def _create_and_load(
             if exists and overwrite:
                 cur.execute(f"DROP TABLE {full}")
 
-            cur.execute(ddl)
+            # Log DDL for debugging
+            import logging as _log
+            _log.getLogger("data_ingestion").info(f"Executing DDL:\n{ddl}")
+
+            try:
+                cur.execute(ddl)
+            except Exception as ddl_exc:
+                raise ValueError(f"CREATE TABLE failed: {ddl_exc}\nDDL was:\n{ddl}") from ddl_exc
 
             # Verify table was actually created before inserting
             cur.execute(
@@ -374,6 +382,13 @@ def _create_table_job(
     ddl, resolved_cols = _build_ddl(table_name, columns, warnings, target_schema)
     col_names      = [c.new_name      for c in resolved_cols]
     original_names = [c.original_name for c in columns]
+
+    import logging as _log2
+    _log2.getLogger("data_ingestion").info(
+        f"DDL to execute (db={target_database}, schema={target_schema}):\n{ddl}"
+    )
+    _log2.getLogger("data_ingestion").info(f"col_names: {col_names}")
+    _log2.getLogger("data_ingestion").info(f"original_names: {original_names}")
 
     # Parse file
     rows = _parse_to_rows(
@@ -469,3 +484,4 @@ def _table_exists(table_name: str, target_schema: str = "public", target_databas
             return cur.fetchone() is not None
     finally:
         conn.close()
+
