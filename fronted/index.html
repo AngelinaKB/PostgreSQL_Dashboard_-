@@ -110,6 +110,7 @@
     .file-csv   { background: #eaf3de; color: #3b6d11; }
     .file-xls   { background: #e1f5ee; color: #0f6e56; }
     .file-xlsx  { background: #e1f5ee; color: #0f6e56; }
+    .file-txt   { background: #e6f1fb; color: #185fa5; }
     .file-other { background: var(--bg-secondary); color: var(--text-secondary); }
     .spinner { display: inline-block; width: 14px; height: 14px; border: 2px solid var(--border-md); border-top-color: var(--text); border-radius: 50%; animation: spin 0.7s linear infinite; }
     @keyframes spin { to { transform: rotate(360deg); } }
@@ -176,8 +177,8 @@
     <div class="drop-zone" id="drop-zone" onclick="document.getElementById('file-input').click()">
       <svg class="drop-icon" viewBox="0 0 40 40" fill="none"><path d="M20 26V14M20 14L15 19M20 14L25 19" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/><path d="M10 31H30M7 22C5.34 20.4 5 18.1 5 16.5C5 11.8 8.8 8 13.5 8C13.9 8 14.3 8.02 14.7 8.07C16.1 5.4 18.9 3.5 22.2 3.5C26.9 3.5 30.7 7.3 30.7 12C30.7 12.3 30.68 12.58 30.65 12.86C33.5 13.8 35.5 16.5 35.5 19.5C35.5 21.6 34.5 23.5 33 24.8" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
       <div class="drop-title">Drop your file here or click to browse</div>
-      <div class="drop-sub">Accepts <b>.csv</b>, <b>.xls</b>, <b>.xlsx</b> &nbsp;·&nbsp; Max 50 MB</div>
-      <input type="file" id="file-input" accept=".csv,.xls,.xlsx">
+      <div class="drop-sub">Accepts <b>.csv</b>, <b>.xls</b>, <b>.xlsx</b>, <b>.txt</b> &nbsp;·&nbsp; Max 50 MB</div>
+      <input type="file" id="file-input" accept=".csv,.xls,.xlsx,.txt">
     </div>
     <div class="progress-wrap" id="progress-wrap">
       <div class="progress-bar-bg"><div class="progress-bar-fill" id="progress-fill"></div></div>
@@ -354,6 +355,7 @@
     'text/csv':'CSV',
     'application/vnd.ms-excel':'XLS',
     'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet':'XLSX',
+    'text/plain':'TXT',
   };
   const SQL_TYPES = ['TEXT','VARCHAR(255)','INTEGER','BIGINT','SMALLINT','NUMERIC','FLOAT','BOOLEAN','DATE','TIMESTAMP','TIMESTAMPTZ','UUID','JSONB','BYTEA'];
 
@@ -724,7 +726,7 @@
   function addHistory(details) {
     historyEmpty.style.display = 'none';
     const ext = fileExt(details.filename);
-    const cls = ['csv','xls','xlsx'].includes(ext) ? 'file-'+ext : 'file-other';
+    const cls = ['csv','xls','xlsx','txt'].includes(ext) ? 'file-'+ext : 'file-other';
     const item = document.createElement('div');
     item.className = 'history-item';
     item.innerHTML = `
