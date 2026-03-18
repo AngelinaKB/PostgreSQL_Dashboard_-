@@ -167,7 +167,7 @@ def _build_ddl(table_name: str, columns: list[ColumnInput], warnings: list[str],
         col_defs.append(f"    PRIMARY KEY ({', '.join(pk_cols)})")
 
     ddl = (
-        f'CREATE TABLE dataset."{table_name}" (\n'
+        f'CREATE TABLE "{target_schema}"."{table_name}" (\n'
         + ",\n".join(col_defs)
         + "\n);"
     )
@@ -212,19 +212,14 @@ def _parse_to_rows(
         engine = "openpyxl" if ext == ".xlsx" else "xlrd"
         df = pd.read_excel(io.BytesIO(raw), engine=engine, dtype=str)
 
-    # Build a rename map: original file header → user new_name
-    # Try matching via original_names first, fall back to sanitized matching
-    if original_names and len(original_names) == len(col_names):
-        # Direct map: file column original_name → user new_name
-        file_cols = [str(c).strip() for c in df.columns]
-        rename_map = {}
-        for orig, new in zip(original_names, col_names):
-            if orig in file_cols:
-                rename_map[orig] = new
-        if rename_map:
-            df = df.rename(columns=rename_map)
+    # Rename file columns to user-defined new_names positionally
+    # This is the most reliable approach — file cols and original_names
+    # are always in the same order from the infer-schema step
+    if original_names and len(original_names) == len(col_names) and len(original_names) == len(df.columns):
+        # Positional rename: file_col[i] → col_names[i]
+        df.columns = col_names
     else:
-        # Fallback: sanitize file columns and match to col_names
+        # Fallback: sanitize and match by name
         df.columns = [_sanitize_name(str(c)) for c in df.columns]
 
     # Select only columns present in both, in order
@@ -484,4 +479,3 @@ def _table_exists(table_name: str, target_schema: str = "public", target_databas
             return cur.fetchone() is not None
     finally:
         conn.close()
-
