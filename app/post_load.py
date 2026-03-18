@@ -128,70 +128,6 @@ def _parse_upload(raw: bytes, content_type: str, filename: str) -> pd.DataFrame:
     return df
 
 
-def _append_rows(
-    table_name:     str,
-    table_schema:   list[dict],
-    df:             pd.DataFrame,
-    empty_as_null:  bool,
-) -> tuple[int, list[str]]:
-    """
-    Cast and bulk-insert rows from df into dataset.<table_name>.
-    Returns (rows_inserted, warnings).
-    """
-    warnings: list[str] = []
-
-    # Column alignment
-    table_cols  = {c["name"]: c["sql_type"] for c in table_schema}
-    upload_cols = set(df.columns)
-
-    missing = set(table_cols) - upload_cols
-    extra   = upload_cols - set(table_cols)
-
-    if missing:
-        warnings.append(f"Uploaded file is missing columns: {', '.join(sorted(missing))}. They will be NULL.")
-    if extra:
-        warnings.append(f"Uploaded file has extra columns not in table: {', '.join(sorted(extra))}. They will be ignored.")
-
-    # Only insert columns present in both
-    insert_cols = [c for c in table_cols if c in upload_cols]
-    if not insert_cols:
-        raise ValueError("No matching columns between uploaded file and table.")
-
-    # Cast rows
-    rows: list[tuple] = []
-    for _, row in df.iterrows():
-        cast_row = tuple(
-            cast_series(row[col], table_cols[col], empty_as_null)
-            for col in insert_cols
-        )
-        rows.append(cast_row)
-
-    if not rows:
-        raise ValueError("Uploaded file has no data rows.")
-
-    # Insert
-    conn = settings.pg_connect()
-    conn.autocommit = False
-    try:
-        with conn.cursor() as cur:
-            lock_id = hash(f"{target_schema}.{table_name}") & 0x7FFFFFFFFFFFFFFF
-            cur.execute(f"SELECT pg_advisory_xact_lock({lock_id})")
-
-            col_list    = ", ".join(f'"{c}"' for c in insert_cols)
-            placeholders = ", ".join(["%s"] * len(insert_cols))
-            insert_sql  = f'INSERT INTO dataset."{table_name}" ({col_list}) VALUES ({placeholders})'
-
-            for i in range(0, len(rows), BATCH_SIZE):
-                psycopg2.extras.execute_batch(cur, insert_sql, rows[i:i+BATCH_SIZE])
-
-        conn.commit()
-        return len(rows), warnings
-    except Exception:
-        conn.rollback()
-        raise
-    finally:
-        conn.close()
-
 
 def _stream_csv(table_name: str, target_schema: str = "public", target_database: str = None):
     """Stream CSV directly from PostgreSQL via COPY TO STDOUT. Never loads full table."""
@@ -356,4 +292,3 @@ async def download_table(
             media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
             headers={"Content-Disposition": f'attachment; filename="{filename}"'},
         )
-
