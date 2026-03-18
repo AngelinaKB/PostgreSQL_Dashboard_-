@@ -182,10 +182,14 @@ def _parse_to_rows(
     content_type: str,
     filename: str,
     col_names: list[str],
+    original_names: list[str] | None = None,
 ) -> list[tuple]:
     """
     Parse the staged file and return rows as list-of-tuples
     matching the order of col_names.
+
+    col_names      — user-defined new names (what the table will use)
+    original_names — original file header names (before user renaming)
     """
     ext = os.path.splitext(filename)[-1].lower()
 
@@ -207,11 +211,28 @@ def _parse_to_rows(
         engine = "openpyxl" if ext == ".xlsx" else "xlrd"
         df = pd.read_excel(io.BytesIO(raw), engine=engine, dtype=str)
 
-    # Normalise column names to match what user defined
-    df.columns = [_sanitize_name(str(c)) for c in df.columns]
+    # Build a rename map: original file header → user new_name
+    # Try matching via original_names first, fall back to sanitized matching
+    if original_names and len(original_names) == len(col_names):
+        # Direct map: file column original_name → user new_name
+        file_cols = [str(c).strip() for c in df.columns]
+        rename_map = {}
+        for orig, new in zip(original_names, col_names):
+            if orig in file_cols:
+                rename_map[orig] = new
+        if rename_map:
+            df = df.rename(columns=rename_map)
+    else:
+        # Fallback: sanitize file columns and match to col_names
+        df.columns = [_sanitize_name(str(c)) for c in df.columns]
 
-    # Select only the columns the user kept, in order
+    # Select only columns present in both, in order
     available = [c for c in col_names if c in df.columns]
+    if not available:
+        raise ValueError(
+            f"No matching columns found between file and schema. "
+            f"File has: {list(df.columns)}, schema expects: {col_names}"
+        )
     df = df[available]
 
     # Replace NaN with None
@@ -247,6 +268,17 @@ def _create_and_load(
             lock_id = hash(f"{target_schema}.{table_name}") & 0x7FFFFFFFFFFFFFFF
             cur.execute(f"SELECT pg_advisory_xact_lock({lock_id})")
 
+            # Pre-flight: verify schema exists
+            cur.execute(
+                "SELECT 1 FROM information_schema.schemata WHERE schema_name = %s",
+                (target_schema,),
+            )
+            if not cur.fetchone():
+                raise ValueError(
+                    f"Schema '{target_schema}' does not exist in database '{target_database}'. "
+                    "Create it first or pick a different schema."
+                )
+
             cur.execute(
                 """
                 SELECT 1 FROM information_schema.tables
@@ -264,6 +296,17 @@ def _create_and_load(
                 cur.execute(f"DROP TABLE {full}")
 
             cur.execute(ddl)
+
+            # Verify table was actually created before inserting
+            cur.execute(
+                "SELECT 1 FROM information_schema.tables WHERE table_schema=%s AND table_name=%s",
+                (target_schema, table_name),
+            )
+            if not cur.fetchone():
+                raise ValueError(
+                    f"Table '{target_schema}.{table_name}' was not created. "
+                    f"Ensure schema '{target_schema}' exists in database '{target_database}'."
+                )
 
             if rows:
                 placeholders = ", ".join(["%s"] * len(col_names))
@@ -329,7 +372,8 @@ def _create_table_job(
     target_schema   = payload_dict.get("target_schema", "public")
     target_database = payload_dict.get("target_database", settings.PG_DATABASE)
     ddl, resolved_cols = _build_ddl(table_name, columns, warnings, target_schema)
-    col_names = [c.new_name for c in resolved_cols]
+    col_names      = [c.new_name      for c in resolved_cols]
+    original_names = [c.original_name for c in columns]
 
     # Parse file
     rows = _parse_to_rows(
@@ -337,6 +381,7 @@ def _create_table_job(
         record["content_type"],
         record["filename"],
         col_names,
+        original_names,
     )
 
     # Create table + load
@@ -424,4 +469,3 @@ def _table_exists(table_name: str, target_schema: str = "public", target_databas
             return cur.fetchone() is not None
     finally:
         conn.close()
-
