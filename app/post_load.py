@@ -80,16 +80,11 @@ def cast_series(value, sql_type: str, empty_as_null: bool = True):
 # Sync helpers
 # ---------------------------------------------------------------------------
 
-def _get_table_schema(table_name: str) -> list[dict]:
+def _get_table_schema(table_name: str, target_schema: str = "public", target_database: str = None) -> list[dict]:
     """
-    Fetch column names and data types from information_schema for
-    dataset.<table_name>. Returns list of {name, sql_type}.
+    Fetch column names and data types from information_schema.
     """
-    conn = psycopg2.connect(
-        host=settings.PG_HOST, port=settings.PG_PORT,
-        user=settings.PG_USER, password=settings.PG_PASSWORD,
-        dbname=settings.PG_DATABASE,
-    )
+    conn = settings.pg_connect(dbname=target_database)
     try:
         with conn.cursor() as cur:
             cur.execute(
@@ -97,15 +92,15 @@ def _get_table_schema(table_name: str) -> list[dict]:
                 SELECT column_name,
                        upper(data_type) as data_type
                 FROM information_schema.columns
-                WHERE table_schema = 'dataset'
+                WHERE table_schema = %s
                   AND table_name   = %s
                 ORDER BY ordinal_position
                 """,
-                (table_name,),
+                (target_schema, table_name),
             )
             rows = cur.fetchall()
         if not rows:
-            raise ValueError(f"Table 'dataset.{table_name}' not found or has no columns.")
+            raise ValueError(f"Table '{target_schema}.{table_name}' not found or has no columns.")
         return [{"name": r[0], "sql_type": r[1]} for r in rows]
     finally:
         conn.close()
@@ -175,15 +170,11 @@ def _append_rows(
         raise ValueError("Uploaded file has no data rows.")
 
     # Insert
-    conn = psycopg2.connect(
-        host=settings.PG_HOST, port=settings.PG_PORT,
-        user=settings.PG_USER, password=settings.PG_PASSWORD,
-        dbname=settings.PG_DATABASE,
-    )
+    conn = settings.pg_connect()
     conn.autocommit = False
     try:
         with conn.cursor() as cur:
-            lock_id = hash(table_name) & 0x7FFFFFFFFFFFFFFF
+            lock_id = hash(f"{target_schema}.{table_name}") & 0x7FFFFFFFFFFFFFFF
             cur.execute(f"SELECT pg_advisory_xact_lock({lock_id})")
 
             col_list    = ", ".join(f'"{c}"' for c in insert_cols)
@@ -202,18 +193,14 @@ def _append_rows(
         conn.close()
 
 
-def _stream_csv(table_name: str):
+def _stream_csv(table_name: str, target_schema: str = "public", target_database: str = None):
     """Stream CSV directly from PostgreSQL via COPY TO STDOUT. Never loads full table."""
-    conn = psycopg2.connect(
-        host=settings.PG_HOST, port=settings.PG_PORT,
-        user=settings.PG_USER, password=settings.PG_PASSWORD,
-        dbname=settings.PG_DATABASE,
-    )
+    conn = settings.pg_connect(dbname=target_database)
     try:
         buf = io.BytesIO()
         with conn.cursor() as cur:
             cur.copy_expert(
-                f'COPY dataset."{table_name}" TO STDOUT WITH (FORMAT CSV, HEADER TRUE)',
+                f'COPY "{target_schema}"."{table_name}" TO STDOUT WITH (FORMAT CSV, HEADER TRUE)',
                 buf,
             )
         buf.seek(0)
@@ -226,15 +213,11 @@ def _stream_csv(table_name: str):
         conn.close()
 
 
-def _build_xlsx(table_name: str) -> bytes:
+def _build_xlsx(table_name: str, target_schema: str = "public", target_database: str = None) -> bytes:
     """Build XLSX using xlsxwriter — much faster than openpyxl for large tables."""
-    conn = psycopg2.connect(
-        host=settings.PG_HOST, port=settings.PG_PORT,
-        user=settings.PG_USER, password=settings.PG_PASSWORD,
-        dbname=settings.PG_DATABASE,
-    )
+    conn = settings.pg_connect(dbname=target_database)
     try:
-        df = pd.read_sql(f'SELECT * FROM dataset."{table_name}"', conn)
+        df = pd.read_sql(f'SELECT * FROM "{target_schema}"."{table_name}"', conn)
     finally:
         conn.close()
     buf = io.BytesIO()
@@ -249,12 +232,12 @@ def _build_xlsx(table_name: str) -> bytes:
 # Endpoints
 # ---------------------------------------------------------------------------
 
-def _append_job(table_name: str, rows_input: list[dict]) -> dict:
+def _append_job(table_name: str, rows_input: list[dict], target_schema: str = "public", target_database: str = None) -> dict:
     """
     Sync worker: cast and insert manually entered rows.
     Runs in thread pool via jobs.submit_job.
     """
-    table_schema = _get_table_schema(table_name)
+    table_schema = _get_table_schema(table_name, target_schema, target_database)
     table_cols   = {c["name"]: c["sql_type"] for c in table_schema}
     insert_cols  = list(table_cols.keys())
 
@@ -273,19 +256,21 @@ def _append_job(table_name: str, rows_input: list[dict]) -> dict:
     if errors:
         raise ValueError("; ".join(errors))
 
-    rows_inserted = _insert_rows(table_name, insert_cols, cast_rows)
+    rows_inserted = _insert_rows(table_name, insert_cols, cast_rows, target_schema, target_database)
     return {
-        "table_name": f"dataset.{table_name}",
+        "table_name": f"{target_schema}.{table_name}",
         "rows_inserted": rows_inserted,
     }
 
 
 @router.post(
-    "/append/{table_name}",
+    "/append/{database}/{schema}/{table_name}",
     status_code=status.HTTP_202_ACCEPTED,
     summary="Queue a background job to insert manually entered rows",
 )
 async def append_rows(
+    database: str,
+    schema: str,
     table_name: str,
     payload: dict,
 ):
@@ -299,10 +284,9 @@ async def append_rows(
     if not rows_input:
         raise HTTPException(status_code=422, detail="No rows provided.")
 
-    # Quick schema check before queuing
     loop = asyncio.get_running_loop()
     try:
-        await loop.run_in_executor(None, partial(_get_table_schema, table_name))
+        await loop.run_in_executor(None, partial(_get_table_schema, table_name, schema, database))
     except ValueError as exc:
         raise HTTPException(status_code=404, detail=str(exc))
 
@@ -312,21 +296,19 @@ async def append_rows(
         fn=_append_job,
         table_name=table_name,
         rows_input=rows_input,
+        target_schema=schema,
+        target_database=database,
     )
 
     return {"job_id": str(job_id), "status": "queued"}
 
 
-def _insert_rows(table_name: str, col_names: list[str], rows: list[tuple]) -> int:
-    conn = psycopg2.connect(
-        host=settings.PG_HOST, port=settings.PG_PORT,
-        user=settings.PG_USER, password=settings.PG_PASSWORD,
-        dbname=settings.PG_DATABASE,
-    )
+def _insert_rows(table_name: str, col_names: list[str], rows: list[tuple], target_schema: str = "public", target_database: str = None) -> int:
+    conn = settings.pg_connect(dbname=target_database)
     conn.autocommit = False
     try:
         with conn.cursor() as cur:
-            lock_id = hash(table_name) & 0x7FFFFFFFFFFFFFFF
+            lock_id = hash(f"{target_schema}.{table_name}") & 0x7FFFFFFFFFFFFFFF
             cur.execute(f"SELECT pg_advisory_xact_lock({lock_id})")
             col_list     = ", ".join(f'"{c}"' for c in col_names)
             placeholders = ", ".join(["%s"] * len(col_names))
@@ -343,10 +325,12 @@ def _insert_rows(table_name: str, col_names: list[str], rows: list[tuple]) -> in
 
 
 @router.get(
-    "/download/{table_name}",
-    summary="Download a dataset table as CSV or XLSX",
+    "/download/{database}/{schema}/{table_name}",
+    summary="Download a table as CSV or XLSX",
 )
 async def download_table(
+    database: str,
+    schema: str,
     table_name: str,
     fmt: str = Query(default="csv", description="Output format: csv or xlsx"),
 ):
@@ -357,14 +341,14 @@ async def download_table(
 
     if fmt == "csv":
         return StreamingResponse(
-            _stream_csv(table_name),
+            _stream_csv(table_name, schema, database),
             media_type="text/csv",
             headers={"Content-Disposition": f'attachment; filename="{filename}"'},
         )
     else:
         loop = asyncio.get_running_loop()
         try:
-            file_bytes = await loop.run_in_executor(None, partial(_build_xlsx, table_name))
+            file_bytes = await loop.run_in_executor(None, partial(_build_xlsx, table_name, schema, database))
         except Exception as exc:
             raise HTTPException(status_code=500, detail=f"Failed to build XLSX: {exc}")
         return StreamingResponse(
@@ -372,3 +356,4 @@ async def download_table(
             media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
             headers={"Content-Disposition": f'attachment; filename="{filename}"'},
         )
+
