@@ -109,7 +109,7 @@ def _get_table_schema(table_name: str, target_schema: str = "public", target_dat
 def _parse_upload(raw: bytes, content_type: str, filename: str) -> pd.DataFrame:
     """Parse uploaded bytes into a DataFrame with sanitised column names."""
     ext = os.path.splitext(filename)[-1].lower()
-    if content_type == "text/csv":
+    if content_type in ("text/csv", "text/plain") or ext == ".txt":
         sample = raw[:4096].decode("utf-8", errors="replace")
         try:
             dialect = csv.Sniffer().sniff(sample, delimiters=",;\t|")
