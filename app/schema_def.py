@@ -223,17 +223,17 @@ async def define_schema(
         def _check_pk_unique(raw: bytes, content_type: str, filename: str, col_original: str) -> int | None:
             """Returns the number of duplicate values if any, else None."""
             ext = os.path.splitext(filename)[-1].lower()
-            if content_type == "text/csv":
+            if content_type in ("text/csv", "text/plain") or ext == ".txt":
                 sample = raw[:4096].decode("utf-8", errors="replace")
                 try:
                     dialect = _csv.Sniffer().sniff(sample, delimiters=",;\t|")
                     delimiter = dialect.delimiter
                 except _csv.Error:
                     delimiter = ","
-                df = pd.read_csv(io.BytesIO(raw), sep=delimiter, encoding="utf-8", nrows=500)
+                df = pd.read_csv(io.BytesIO(raw), sep=delimiter, dtype=str, keep_default_na=False, encoding="utf-8")
             else:
                 engine = "openpyxl" if ext == ".xlsx" else "xlrd"
-                df = pd.read_excel(io.BytesIO(raw), engine=engine, nrows=500)
+                df = pd.read_excel(io.BytesIO(raw), engine=engine, dtype=str)
 
             df.columns = [str(c).strip() for c in df.columns]
             if col_original not in df.columns:
@@ -344,7 +344,7 @@ async def infer_schema(
 
     def _infer(raw: bytes, content_type: str, filename: str) -> dict:
         ext = os.path.splitext(filename)[-1].lower()
-        if content_type == "text/csv":
+        if content_type in ("text/csv", "text/plain") or ext == ".txt":
             import csv as _csv
             sample = raw[:4096].decode("utf-8", errors="replace")
             try:
