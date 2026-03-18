@@ -19,5 +19,16 @@ class Settings(BaseSettings):
             f"@{self.PG_HOST}:{self.PG_PORT}/{self.PG_DATABASE}"
         )
 
+    def pg_connect(self, dbname: str = None):
+        """Return a psycopg2 connection to any database on the same server."""
+        import psycopg2
+        return psycopg2.connect(
+            host=self.PG_HOST,
+            port=self.PG_PORT,
+            user=self.PG_USER,
+            password=self.PG_PASSWORD,
+            dbname=dbname or self.PG_DATABASE,
+        )
+
 
 settings = Settings()
