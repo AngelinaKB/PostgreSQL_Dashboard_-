@@ -10,12 +10,13 @@ from app.models import StagingFile
 
 router = APIRouter()
 
-ALLOWED_EXTENSIONS = {".csv", ".xls", ".xlsx"}
+ALLOWED_EXTENSIONS = {".csv", ".xls", ".xlsx", ".txt"}
 ALLOWED_MIME_TYPES = {
     "text/csv",
     "application/vnd.ms-excel",
     "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
     "application/octet-stream",  # normalised by extension below
+    "text/plain",
 }
 CHUNK_SIZE = 1 * 1024 * 1024  # 1 MB
 
@@ -39,7 +40,7 @@ async def upload_file(
     if ext not in ALLOWED_EXTENSIONS:
         raise HTTPException(
             status_code=status.HTTP_415_UNSUPPORTED_MEDIA_TYPE,
-            detail=f"Extension '{ext}' not allowed. Use: .csv, .xls, .xlsx",
+            detail=f"Extension '{ext}' not allowed. Use: .csv, .xls, .xlsx, .txt",
         )
 
     # --- Normalise content type ---
@@ -50,6 +51,8 @@ async def upload_file(
             ".xls":  "application/vnd.ms-excel",
             ".xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         }.get(ext, ct)
+    if ct == "text/plain" and ext == ".txt":
+        ct = "text/plain"
 
     if ct not in ALLOWED_MIME_TYPES:
         raise HTTPException(
