@@ -561,11 +561,11 @@
   const SAVED_KEY = 'pg_saved_connections';
 
   function getSavedConns() {
-    try { return JSON.parse(sessionStorage.getItem(SAVED_KEY) || '[]'); }
+    try { return JSON.parse(localStorage.getItem(SAVED_KEY) || '[]'); }
     catch { return []; }
   }
   function setSavedConns(list) {
-    sessionStorage.setItem(SAVED_KEY, JSON.stringify(list));
+    localStorage.setItem(SAVED_KEY, JSON.stringify(list));
   }
 
   function renderSavedConnDropdown() {
