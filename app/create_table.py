@@ -16,6 +16,7 @@ POST /create-table/{file_id}
 
 import asyncio
 import csv
+from app.utils import sniff_delimiter
 import io
 import os
 import re
@@ -202,11 +203,7 @@ def _parse_to_rows(
 
     if content_type in ("text/csv", "text/plain") or ext == ".txt":
         sample = raw[:4096].decode("utf-8", errors="replace")
-        try:
-            dialect = csv.Sniffer().sniff(sample, delimiters=",;\t|")
-            delimiter = dialect.delimiter
-        except csv.Error:
-            delimiter = ","
+        delimiter = sniff_delimiter(raw)
         df = pd.read_csv(
             io.BytesIO(raw),
             sep=delimiter,
