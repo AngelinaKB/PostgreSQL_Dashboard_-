@@ -357,6 +357,14 @@ async def infer_schema(
             engine = "openpyxl" if ext == ".xlsx" else "xlrd"
             df = pd.read_excel(io.BytesIO(raw), engine=engine)
 
+        col_count = len(df.columns)
+        warnings = []
+        if col_count > 1600:
+            warnings.append(
+                f"Your file has {col_count} columns. PostgreSQL supports a maximum of 1,600 — "
+                f"please remove {col_count - 1600} column(s) before creating the table."
+            )
+
         columns = []
         for col in df.columns:
             col_str = str(col).strip()
@@ -376,6 +384,7 @@ async def infer_schema(
         return {
             "table_name": _default_table_name(filename),
             "columns": columns,
+            "warnings": warnings,
         }
 
     loop = asyncio.get_running_loop()
