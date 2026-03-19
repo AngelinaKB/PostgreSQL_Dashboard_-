@@ -98,6 +98,11 @@ class CreateTableRequest(BaseModel):
     def at_least_one(cls, v: list) -> list:
         if not v:
             raise ValueError("At least one column is required.")
+        if len(v) > 1600:
+            raise ValueError(
+                f"PostgreSQL supports a maximum of 1,600 columns per table. "
+                f"Your file has {len(v)} columns."
+            )
         return v
 
 
