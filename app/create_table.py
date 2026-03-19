@@ -432,8 +432,8 @@ def _create_table_job(
 async def create_table(
     file_id: str,
     payload: CreateTableRequest,
-    db: AsyncSession = Depends(get_db),
-    token: str = Depends(require_session),
+    db: AsyncSession = Depends(get_db),  # type: ignore[assignment]
+    token: str = Depends(require_session),  # type: ignore[assignment]
 ) -> dict:
     from uuid import UUID
     from app.jobs import submit_job
