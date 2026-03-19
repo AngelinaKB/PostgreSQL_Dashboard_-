@@ -19,6 +19,7 @@ GET /download/{table_name}
 """
 
 import csv
+from app.utils import sniff_delimiter
 import io
 import os
 from functools import partial
@@ -112,11 +113,7 @@ def _parse_upload(raw: bytes, content_type: str, filename: str) -> pd.DataFrame:
     ext = os.path.splitext(filename)[-1].lower()
     if content_type in ("text/csv", "text/plain") or ext == ".txt":
         sample = raw[:4096].decode("utf-8", errors="replace")
-        try:
-            dialect = csv.Sniffer().sniff(sample, delimiters=",;\t|")
-            delimiter = dialect.delimiter
-        except csv.Error:
-            delimiter = ","
+        delimiter = sniff_delimiter(raw)
         df = pd.read_csv(
             io.BytesIO(raw), sep=delimiter,
             dtype=str, keep_default_na=False, encoding="utf-8",
