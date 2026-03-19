@@ -122,6 +122,23 @@
     .step-num { width: 22px; height: 22px; border-radius: 50%; border: 1px solid currentColor; display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 500; flex-shrink: 0; }
     .step-sep { color: var(--text-tertiary); font-size: 12px; }
     .job-status-bar { display:none; align-items:center; gap:10px; padding:10px 14px; background:var(--bg-info); border:0.5px solid var(--border-md); border-radius:var(--radius-md); margin-top:1rem; font-size:13px; color:var(--text-info); }
+
+    /* ── connection card ── */
+    .conn-card { background: var(--bg); border: 0.5px solid var(--border); border-radius: var(--radius-lg); padding: 1.5rem; margin-bottom: 1.5rem; }
+    .conn-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin: 1rem 0; }
+    .conn-grid-full { grid-column: 1 / -1; }
+    .conn-label { font-size: 11px; color: var(--text-tertiary); text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 4px; }
+    .conn-input { width: 100%; padding: 7px 10px; font-size: 13px; font-family: var(--font-mono); border: 0.5px solid var(--border-md); border-radius: var(--radius-md); background: var(--bg-secondary); color: var(--text); }
+    .conn-input:focus { outline: none; border-color: var(--text-secondary); }
+    .conn-actions { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-top: 1rem; }
+    .conn-status { font-size: 13px; display: flex; align-items: center; gap: 6px; }
+    .conn-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--text-tertiary); flex-shrink: 0; }
+    .conn-dot.connected { background: var(--text-success); }
+    .conn-dot.error     { background: var(--text-danger); }
+    .saved-conn-row { display: flex; align-items: center; gap: 8px; margin-bottom: 1rem; }
+    .saved-conn-row select { flex: 1; font-size: 13px; padding: 7px 10px; border: 0.5px solid var(--border-md); border-radius: var(--radius-md); background: var(--bg-secondary); color: var(--text); }
+    .page-overlay { pointer-events: none; opacity: 0.35; transition: opacity 0.2s; user-select: none; }
+    @media (max-width: 600px) { .conn-grid { grid-template-columns: 1fr; } .conn-grid-full { grid-column: 1; } }
     @media (max-width: 768px) {
       .page { padding: 1rem 0.75rem; }
       .stats { grid-template-columns: 1fr 1fr; }
@@ -157,6 +174,64 @@
       <div class="topbar-sub">Upload, preview, and define schema for your files</div>
     </div>
   </div>
+  <!-- Connection card -->
+  <div class="conn-card" id="conn-card">
+    <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:0.75rem">
+      <div>
+        <div style="font-size:15px;font-weight:500">PostgreSQL Connection</div>
+        <div style="font-size:12px;color:var(--text-secondary);margin-top:2px">Connect before uploading or creating tables</div>
+      </div>
+      <div class="conn-status">
+        <div class="conn-dot" id="conn-dot"></div>
+        <span id="conn-status-text" style="color:var(--text-secondary)">Not connected</span>
+        <button class="btn" id="btn-disconnect" onclick="doDisconnect()" style="display:none;margin-left:4px">Disconnect</button>
+      </div>
+    </div>
+    <div class="saved-conn-row">
+      <select id="saved-conn-select" onchange="loadSavedConn(this.value)">
+        <option value="">— saved connections —</option>
+      </select>
+      <button class="btn" onclick="deleteSavedConn()">Delete</button>
+    </div>
+    <div class="conn-grid">
+      <div class="conn-grid-full">
+        <div class="conn-label">Connection name</div>
+        <input class="conn-input" id="conn-name" placeholder="My DB" autocomplete="off">
+      </div>
+      <div>
+        <div class="conn-label">Host</div>
+        <input class="conn-input" id="conn-host" value="localhost" autocomplete="off" spellcheck="false">
+      </div>
+      <div>
+        <div class="conn-label">Port</div>
+        <input class="conn-input" id="conn-port" value="5432" autocomplete="off">
+      </div>
+      <div>
+        <div class="conn-label">Database</div>
+        <input class="conn-input" id="conn-db" placeholder="postgres" autocomplete="off" spellcheck="false">
+      </div>
+      <div>
+        <div class="conn-label">User</div>
+        <input class="conn-input" id="conn-user" placeholder="postgres" autocomplete="off" spellcheck="false">
+      </div>
+      <div class="conn-grid-full">
+        <div class="conn-label">Password</div>
+        <input class="conn-input" id="conn-pass" type="password" autocomplete="off">
+      </div>
+    </div>
+    <div class="conn-actions">
+      <button class="btn btn-primary" onclick="doConnect()">
+        <span id="conn-spinner" style="display:none"><span class="spinner" style="border-top-color:var(--bg)"></span></span>
+        Test &amp; Connect
+      </button>
+      <button class="btn" onclick="saveConn()">Save connection</button>
+    </div>
+    <div class="err-banner" id="conn-err"></div>
+  </div>
+
+  <!-- Main content locked until connected -->
+  <div id="main-content" class="page-overlay">
+
   <div class="stats">
     <div class="stat"><div class="stat-label">Files uploaded</div><div class="stat-value" id="stat-count">0</div></div>
     <div class="stat"><div class="stat-label">Total size</div><div class="stat-value" id="stat-size">0 <span>KB</span></div></div>
@@ -327,10 +402,21 @@
     <div class="history-empty" id="history-empty">No uploads yet this session</div>
     <div class="history-list" id="history-list"></div>
   </div>
+  </div><!-- /main-content -->
 </div>
 
 <script>
   const API = 'http://127.0.0.1:8000';
+
+  // ── session ──
+  let sessionToken = sessionStorage.getItem('pg_session_token') || null;
+
+  // Central fetch wrapper — adds X-Session-Token header automatically
+  async function apiFetch(url, options = {}) {
+    const headers = { ...(options.headers || {}) };
+    if (sessionToken) headers['X-Session-Token'] = sessionToken;
+    return fetch(url, { ...options, headers });
+  }
   const dropZone     = document.getElementById('drop-zone');
   const fileInput    = document.getElementById('file-input');
   const progressWrap = document.getElementById('progress-wrap');
@@ -393,7 +479,7 @@
   async function pollJob(jobId, onSuccess, onFailure, statusEl) {
     const check = async () => {
       try {
-        const res = await fetch(`${API}/job-status/${jobId}`);
+        const res = await apiFetch(`${API}/job-status/${jobId}`);
         const job = await res.json();
         if (statusEl) statusEl.textContent = `Status: ${job.status}…`;
         if (job.status === 'success') { onSuccess(job.result); }
@@ -481,14 +567,155 @@
     }
   }
 
-  // ── database / schema discovery ──
+  // ── connection management ──
+  const SAVED_KEY = 'pg_saved_connections';
+
+  function getSavedConns() {
+    try { return JSON.parse(sessionStorage.getItem(SAVED_KEY) || '[]'); }
+    catch { return []; }
+  }
+  function setSavedConns(list) {
+    sessionStorage.setItem(SAVED_KEY, JSON.stringify(list));
+  }
+
+  function renderSavedConnDropdown() {
+    const sel  = document.getElementById('saved-conn-select');
+    const list = getSavedConns();
+    sel.innerHTML = '<option value="">— saved connections —</option>' +
+      list.map((c, i) => `<option value="${i}">${c.name} (${c.host}:${c.port}/${c.database})</option>`).join('');
+  }
+
+  function loadSavedConn(idx) {
+    if (idx === '') return;
+    const c = getSavedConns()[parseInt(idx)];
+    if (!c) return;
+    document.getElementById('conn-name').value = c.name     || '';
+    document.getElementById('conn-host').value = c.host     || 'localhost';
+    document.getElementById('conn-port').value = c.port     || '5432';
+    document.getElementById('conn-db').value   = c.database || '';
+    document.getElementById('conn-user').value = c.user     || '';
+    document.getElementById('conn-pass').value = c.password || '';
+  }
+
+  function saveConn() {
+    const name = document.getElementById('conn-name').value.trim() || 'Connection';
+    const conn = {
+      name,
+      host:     document.getElementById('conn-host').value.trim(),
+      port:     document.getElementById('conn-port').value.trim(),
+      database: document.getElementById('conn-db').value.trim(),
+      user:     document.getElementById('conn-user').value.trim(),
+      password: document.getElementById('conn-pass').value,
+    };
+    const list = getSavedConns();
+    const existing = list.findIndex(c => c.name === name);
+    if (existing >= 0) list[existing] = conn;
+    else list.push(conn);
+    setSavedConns(list);
+    renderSavedConnDropdown();
+    // Select the saved one
+    const sel = document.getElementById('saved-conn-select');
+    sel.value = String(existing >= 0 ? existing : list.length - 1);
+  }
+
+  function deleteSavedConn() {
+    const sel  = document.getElementById('saved-conn-select');
+    const idx  = parseInt(sel.value);
+    if (isNaN(idx)) return;
+    const list = getSavedConns();
+    list.splice(idx, 1);
+    setSavedConns(list);
+    renderSavedConnDropdown();
+  }
+
+  function setConnected(name, host, port, db, version) {
+    sessionStorage.setItem('pg_session_token', sessionToken);
+    document.getElementById('conn-dot').className        = 'conn-dot connected';
+    document.getElementById('conn-status-text').textContent = `Connected · ${name || host} (PG ${version})`;
+    document.getElementById('conn-status-text').style.color  = 'var(--text-success)';
+    document.getElementById('btn-disconnect').style.display  = 'inline-flex';
+    // Unlock main content
+    document.getElementById('main-content').classList.remove('page-overlay');
+    hideErr(document.getElementById('conn-err'));
+  }
+
+  function setDisconnected() {
+    sessionToken = null;
+    sessionStorage.removeItem('pg_session_token');
+    document.getElementById('conn-dot').className        = 'conn-dot';
+    document.getElementById('conn-status-text').textContent = 'Not connected';
+    document.getElementById('conn-status-text').style.color  = 'var(--text-secondary)';
+    document.getElementById('btn-disconnect').style.display  = 'none';
+    document.getElementById('main-content').classList.add('page-overlay');
+  }
+
+  async function doConnect() {
+    const spinner = document.getElementById('conn-spinner');
+    const errEl   = document.getElementById('conn-err');
+    hideErr(errEl);
+    showEl(spinner, 'inline-block');
+
+    const body = {
+      host:     document.getElementById('conn-host').value.trim(),
+      port:     parseInt(document.getElementById('conn-port').value) || 5432,
+      database: document.getElementById('conn-db').value.trim(),
+      user:     document.getElementById('conn-user').value.trim(),
+      password: document.getElementById('conn-pass').value,
+    };
+
+    try {
+      const res  = await fetch(`${API}/connect`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        showErr(errEl, data.detail || 'Connection failed.');
+        setDisconnected();
+        return;
+      }
+      sessionToken = data.token;
+      const name   = document.getElementById('conn-name').value.trim();
+      setConnected(name, data.host, data.port, data.database, data.server_version);
+    } catch(e) {
+      showErr(errEl, 'Could not reach the API: ' + e.message);
+    } finally {
+      hideEl(spinner);
+    }
+  }
+
+  async function doDisconnect() {
+    if (sessionToken) {
+      await apiFetch(`${API}/connect`, { method: 'DELETE' }).catch(() => {});
+    }
+    setDisconnected();
+  }
+
+  // On load — restore session if token still valid
+  async function restoreSession() {
+    if (!sessionToken) return;
+    try {
+      const res = await apiFetch(`${API}/connect/me`);
+      if (res.ok) {
+        const data = await res.json();
+        setConnected('', data.host, data.port, data.database, '');
+      } else {
+        setDisconnected();
+      }
+    } catch { setDisconnected(); }
+  }
+
+  // ── page init ──
+  renderSavedConnDropdown();
+  restoreSession();
   async function loadDatabases() {
     const dbSel     = document.getElementById('db-select');
     const schemaSel = document.getElementById('schema-select');
     const spinner   = document.getElementById('db-spinner');
     showEl(spinner, 'inline-block');
     try {
-      const res  = await fetch(`${API}/databases`);
+      const res  = await apiFetch(`${API}/databases`);
       const dbs  = await res.json();
       dbSel.innerHTML = dbs.map(d => `<option value="${d}">${d}</option>`).join('');
       // Auto-load schemas for the first db
@@ -522,7 +749,7 @@
     hideEl(document.getElementById('schema-warnings'));
     hideEl(document.getElementById('schema-ok'));
     try {
-      const res = await fetch(`${API}/infer-schema/${currentId}`);
+      const res = await apiFetch(`${API}/infer-schema/${currentId}`);
       if (!res.ok) throw new Error('Failed to infer schema');
       const schema = await res.json();
       inferredSchema = schema;
@@ -592,7 +819,7 @@
     }
     showEl(spinner, 'inline-block');
     try {
-      const res  = await fetch(`${API}/define-schema/${currentId}`, {
+      const res  = await apiFetch(`${API}/define-schema/${currentId}`, {
         method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(payload),
       });
       const data = await res.json();
@@ -648,7 +875,7 @@
     showEl(resultCard);
 
     try {
-      const res  = await fetch(`${API}/create-table/${currentId}`, {
+      const res  = await apiFetch(`${API}/create-table/${currentId}`, {
         method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(payload),
       });
       const data = await res.json();
@@ -714,7 +941,7 @@
 
   // ── fetch file details ──
   async function fetchDetails(id) {
-    const res = await fetch(`${API}/file-details/${id}`);
+    const res = await apiFetch(`${API}/file-details/${id}`);
     if (!res.ok) {
       const err = await res.json().catch(()=>({detail:'Failed to load details'}));
       throw new Error(err.detail || 'Failed to load details');
@@ -768,7 +995,7 @@
     form.append('file', file);
 
     try {
-      const res = await fetch(API + '/upload', {method:'POST', body:form});
+      const res = await apiFetch(API + '/upload', {method:'POST', body:form});
       clearInterval(ticker);
       if (!res.ok) {
         const err = await res.json().catch(()=>({detail:'Upload failed'}));
@@ -895,7 +1122,7 @@
     showEl(spinner, 'inline-block');
 
     try {
-      const res  = await fetch(`${API}/append/${currentTargetDb}/${currentTargetSchema}/${currentTableName}`, {
+      const res  = await apiFetch(`${API}/append/${currentTargetDb}/${currentTargetSchema}/${currentTableName}`, {
         method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({rows:stagedRows}),
       });
       const data = await res.json();
@@ -942,4 +1169,3 @@
 </script>
 </body>
 </html>
-
