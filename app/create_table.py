@@ -31,6 +31,7 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
+from app.session import require_session, session_pg_connect
 from app.db import get_db
 from app.models import StagingFile
 from app.schema_def import (
@@ -249,13 +250,14 @@ def _create_and_load(
     overwrite:       bool = False,
     target_database: str = None,
     target_schema:   str = "public",
+    session_token:   str = None,
 ) -> int:
     """
-    Opens a raw psycopg2 connection (to target_database),
-    acquires an advisory lock, creates the table, bulk-inserts rows,
+    Opens a psycopg2 connection to target_database using session credentials.
+    Acquires an advisory lock, creates the table, bulk-inserts rows,
     runs ANALYZE, commits. Returns the number of rows inserted.
     """
-    conn = settings.pg_connect(dbname=target_database)
+    conn = session_pg_connect(session_token, dbname=target_database)
     conn.autocommit = False
     full = f'"{target_schema}"."{table_name}"'
 
@@ -340,6 +342,7 @@ def _create_and_load(
 def _create_table_job(
     file_id_str: str,
     payload_dict: dict,
+    session_token: str = None,
 ) -> dict:
     """
     Full create-table pipeline in one sync function.
@@ -395,7 +398,7 @@ def _create_table_job(
     )
 
     # Create table + load
-    rows_loaded = _create_and_load(ddl, table_name, col_names, rows, overwrite, target_database, target_schema)
+    rows_loaded = _create_and_load(ddl, table_name, col_names, rows, overwrite, target_database, target_schema, session_token)
 
     # Update staging status
     conn2 = settings.pg_connect()
@@ -430,11 +433,11 @@ async def create_table(
     file_id: str,
     payload: CreateTableRequest,
     db: AsyncSession = Depends(get_db),
+    token: str = Depends(require_session),
 ) -> dict:
     from uuid import UUID
     from app.jobs import submit_job
 
-    # Validate file exists before queuing
     try:
         uid = UUID(file_id)
     except ValueError:
@@ -444,10 +447,12 @@ async def create_table(
     if record is None:
         raise HTTPException(status_code=404, detail=f"File '{file_id}' not found.")
 
-    # Quick collision check (sync, fast) — before queuing
     if not payload.overwrite:
         loop = asyncio.get_running_loop()
-        exists = await loop.run_in_executor(None, _table_exists, payload.table_name, payload.target_schema, payload.target_database)
+        exists = await loop.run_in_executor(
+            None, _table_exists,
+            payload.table_name, payload.target_schema, payload.target_database, token
+        )
         if exists:
             raise HTTPException(
                 status_code=409,
@@ -463,13 +468,14 @@ async def create_table(
         fn=_create_table_job,
         file_id_str=file_id,
         payload_dict=payload.model_dump(),
+        session_token=token,
     )
 
     return {"job_id": str(job_id), "status": "queued"}
 
 
-def _table_exists(table_name: str, target_schema: str = "public", target_database: str = None) -> bool:
-    conn = settings.pg_connect(dbname=target_database)
+def _table_exists(table_name: str, target_schema: str = "public", target_database: str = None, session_token: str = None) -> bool:
+    conn = session_pg_connect(session_token, dbname=target_database)
     try:
         with conn.cursor() as cur:
             cur.execute(
