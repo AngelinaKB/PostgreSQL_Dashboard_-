@@ -210,7 +210,7 @@ async def append_rows(
     schema: str,
     table_name: str,
     payload: dict,
-    token: str = Depends(require_session),
+    token: str = Depends(require_session),  # type: ignore[assignment]
 ):
     """
     Accepts { rows: [ {col: value, ...}, ... ] }
@@ -272,7 +272,7 @@ async def download_table(
     schema: str,
     table_name: str,
     fmt: str = Query(default="csv", description="Output format: csv or xlsx"),
-    token: str = Depends(require_session),
+    token: str = Depends(require_session),  # type: ignore[assignment]
 ):
     if fmt not in ("csv", "xlsx"):
         raise HTTPException(status_code=400, detail="fmt must be 'csv' or 'xlsx'.")
