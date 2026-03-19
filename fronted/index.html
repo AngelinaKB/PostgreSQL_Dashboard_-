@@ -710,9 +710,10 @@
     try {
       const res  = await apiFetch(`${API}/meta/databases`);
       const dbs  = await res.json();
-      dbSel.innerHTML = dbs.map(d => `<option value="${d}">${d}</option>`).join('');
-      // Auto-load schemas for the first db
-      if (dbs.length > 0) await loadSchemas(dbs[0]);
+      // Always start with a blank prompt — user must consciously pick
+      dbSel.innerHTML = '<option value="">— select database —</option>' +
+        dbs.map(d => `<option value="${d}">${d}</option>`).join('');
+      schemaSel.innerHTML = '<option value="">— select schema —</option>';
     } catch(e) {
       dbSel.innerHTML = '<option value="">Failed to load</option>';
     } finally {
@@ -728,7 +729,8 @@
     try {
       const res     = await apiFetch(`${API}/meta/schemas/${database}`);
       const schemas = await res.json();
-      schemaSel.innerHTML = schemas.map(s => `<option value="${s}">${s}</option>`).join('');
+      schemaSel.innerHTML = '<option value="">— select schema —</option>' +
+        schemas.map(s => `<option value="${s}">${s}</option>`).join('');
     } catch(e) {
       schemaSel.innerHTML = '<option value="">Failed to load</option>';
     } finally {
@@ -791,6 +793,11 @@
     const tableName = document.getElementById('table-name-input').value.trim();
     const targetDb  = document.getElementById('db-select').value;
     const targetSch = document.getElementById('schema-select').value;
+    if (!targetDb || !targetSch) {
+      const errEl = document.getElementById('schema-err');
+      showErr(errEl, 'Please select a target database and schema before proceeding.');
+      throw new Error('No database/schema selected');
+    }
     const rows = document.querySelectorAll('#schema-tbody tr');
     const columns = Array.from(rows).map((row, i) => ({
       original_name: inferredSchema.columns[i].original_name,
