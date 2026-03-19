@@ -16,7 +16,7 @@ from app.session import require_session, session_pg_connect
 router = APIRouter()
 
 
-@router.get("/databases", summary="List all databases on the PostgreSQL server")
+@router.get("/meta/databases", summary="List all databases on the PostgreSQL server")
 def list_databases(token: str = Depends(require_session)) -> list[str]:
     conn = session_pg_connect(token)
     try:
@@ -35,7 +35,7 @@ def list_databases(token: str = Depends(require_session)) -> list[str]:
         conn.close()
 
 
-@router.get("/schemas/{database}", summary="List all schemas inside a database")
+@router.get("/meta/schemas/{database}", summary="List all schemas inside a database")
 def list_schemas(database: str, token: str = Depends(require_session)) -> list[str]:
     try:
         conn = session_pg_connect(token, dbname=database)
@@ -57,7 +57,7 @@ def list_schemas(database: str, token: str = Depends(require_session)) -> list[s
         conn.close()
 
 
-@router.get("/tables/{database}/{schema}", summary="List all tables inside a schema")
+@router.get("/meta/tables/{database}/{schema}", summary="List all tables inside a schema")
 def list_tables(database: str, schema: str, token: str = Depends(require_session)) -> list[str]:
     try:
         conn = session_pg_connect(token, dbname=database)
