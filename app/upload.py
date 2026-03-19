@@ -7,6 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.config import settings
 from app.db import get_db
 from app.models import StagingFile
+from app.utils import sniff_delimiter
 
 router = APIRouter()
 
@@ -78,27 +79,25 @@ async def upload_file(
     if ext == ".txt":
         import csv as _csv
         sample = file_bytes[:4096].decode("utf-8", errors="replace")
-        # Must be sniffable as delimited AND have at least 2 columns
+        # Validate it's structured — must have at least 2 columns
+        detected_delim = sniff_delimiter(file_bytes)
         try:
-            dialect  = _csv.Sniffer().sniff(sample, delimiters=",;\t|")
-            # Check there's actually more than one column
-            reader   = _csv.reader(sample.splitlines()[:3], dialect)
-            rows     = [r for r in reader if r]
+            reader = _csv.reader(sample.splitlines()[:3], delimiter=detected_delim)
+            rows   = [r for r in reader if r]
             if not rows or len(rows[0]) < 2:
                 raise HTTPException(
                     status_code=status.HTTP_415_UNSUPPORTED_MEDIA_TYPE,
                     detail=(
-                        ".txt files must be structured delimited text (CSV-like with tabs, "
-                        "commas, semicolons, or pipes). Plain text files are not supported."
+                        ".txt files must be structured delimited text (e.g. tab, comma, "
+                        "tilde, pipe separated). Plain unstructured text is not supported."
                     ),
                 )
-        except _csv.Error:
+        except Exception as e:
+            if isinstance(e, HTTPException):
+                raise
             raise HTTPException(
                 status_code=status.HTTP_415_UNSUPPORTED_MEDIA_TYPE,
-                detail=(
-                    "Could not detect a delimiter in the .txt file. "
-                    "Only structured delimited text files are supported (e.g. tab-separated)."
-                ),
+                detail=f"Could not parse .txt file as delimited text: {e}",
             )
 
     # --- Insert into stg.staging_files ---
