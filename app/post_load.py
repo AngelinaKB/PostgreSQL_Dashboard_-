@@ -31,6 +31,7 @@ from fastapi import APIRouter, HTTPException, Query, status
 from fastapi.responses import StreamingResponse
 
 from app.config import settings
+from app.session import require_session, session_pg_connect
 from app.schema_def import _sanitize_name
 
 router = APIRouter()
@@ -80,11 +81,11 @@ def cast_series(value, sql_type: str, empty_as_null: bool = True):
 # Sync helpers
 # ---------------------------------------------------------------------------
 
-def _get_table_schema(table_name: str, target_schema: str = "public", target_database: str = None) -> list[dict]:
+def _get_table_schema(table_name: str, target_schema: str = "public", target_database: str = None, session_token: str = None) -> list[dict]:
     """
     Fetch column names and data types from information_schema.
     """
-    conn = settings.pg_connect(dbname=target_database)
+    conn = session_pg_connect(session_token, dbname=target_database)
     try:
         with conn.cursor() as cur:
             cur.execute(
@@ -129,9 +130,9 @@ def _parse_upload(raw: bytes, content_type: str, filename: str) -> pd.DataFrame:
 
 
 
-def _stream_csv(table_name: str, target_schema: str = "public", target_database: str = None):
+def _stream_csv(table_name: str, target_schema: str = "public", target_database: str = None, session_token: str = None):
     """Stream CSV directly from PostgreSQL via COPY TO STDOUT. Never loads full table."""
-    conn = settings.pg_connect(dbname=target_database)
+    conn = session_pg_connect(session_token, dbname=target_database)
     try:
         buf = io.BytesIO()
         with conn.cursor() as cur:
@@ -149,9 +150,9 @@ def _stream_csv(table_name: str, target_schema: str = "public", target_database:
         conn.close()
 
 
-def _build_xlsx(table_name: str, target_schema: str = "public", target_database: str = None) -> bytes:
+def _build_xlsx(table_name: str, target_schema: str = "public", target_database: str = None, session_token: str = None) -> bytes:
     """Build XLSX using xlsxwriter — much faster than openpyxl for large tables."""
-    conn = settings.pg_connect(dbname=target_database)
+    conn = session_pg_connect(session_token, dbname=target_database)
     try:
         df = pd.read_sql(f'SELECT * FROM "{target_schema}"."{table_name}"', conn)
     finally:
@@ -168,12 +169,12 @@ def _build_xlsx(table_name: str, target_schema: str = "public", target_database:
 # Endpoints
 # ---------------------------------------------------------------------------
 
-def _append_job(table_name: str, rows_input: list[dict], target_schema: str = "public", target_database: str = None) -> dict:
+def _append_job(table_name: str, rows_input: list[dict], target_schema: str = "public", target_database: str = None, session_token: str = None) -> dict:
     """
     Sync worker: cast and insert manually entered rows.
     Runs in thread pool via jobs.submit_job.
     """
-    table_schema = _get_table_schema(table_name, target_schema, target_database)
+    table_schema = _get_table_schema(table_name, target_schema, target_database, session_token)
     table_cols   = {c["name"]: c["sql_type"] for c in table_schema}
     insert_cols  = list(table_cols.keys())
 
@@ -192,7 +193,7 @@ def _append_job(table_name: str, rows_input: list[dict], target_schema: str = "p
     if errors:
         raise ValueError("; ".join(errors))
 
-    rows_inserted = _insert_rows(table_name, insert_cols, cast_rows, target_schema, target_database)
+    rows_inserted = _insert_rows(table_name, insert_cols, cast_rows, target_schema, target_database, session_token)
     return {
         "table_name": f"{target_schema}.{table_name}",
         "rows_inserted": rows_inserted,
@@ -209,6 +210,7 @@ async def append_rows(
     schema: str,
     table_name: str,
     payload: dict,
+    token: str = Depends(require_session),
 ):
     """
     Accepts { rows: [ {col: value, ...}, ... ] }
@@ -222,7 +224,7 @@ async def append_rows(
 
     loop = asyncio.get_running_loop()
     try:
-        await loop.run_in_executor(None, partial(_get_table_schema, table_name, schema, database))
+        await loop.run_in_executor(None, partial(_get_table_schema, table_name, schema, database, token))
     except ValueError as exc:
         raise HTTPException(status_code=404, detail=str(exc))
 
@@ -234,13 +236,14 @@ async def append_rows(
         rows_input=rows_input,
         target_schema=schema,
         target_database=database,
+        session_token=token,
     )
 
     return {"job_id": str(job_id), "status": "queued"}
 
 
-def _insert_rows(table_name: str, col_names: list[str], rows: list[tuple], target_schema: str = "public", target_database: str = None) -> int:
-    conn = settings.pg_connect(dbname=target_database)
+def _insert_rows(table_name: str, col_names: list[str], rows: list[tuple], target_schema: str = "public", target_database: str = None, session_token: str = None) -> int:
+    conn = session_pg_connect(session_token, dbname=target_database)
     conn.autocommit = False
     try:
         with conn.cursor() as cur:
@@ -269,6 +272,7 @@ async def download_table(
     schema: str,
     table_name: str,
     fmt: str = Query(default="csv", description="Output format: csv or xlsx"),
+    token: str = Depends(require_session),
 ):
     if fmt not in ("csv", "xlsx"):
         raise HTTPException(status_code=400, detail="fmt must be 'csv' or 'xlsx'.")
@@ -277,14 +281,14 @@ async def download_table(
 
     if fmt == "csv":
         return StreamingResponse(
-            _stream_csv(table_name, schema, database),
+            _stream_csv(table_name, schema, database, token),
             media_type="text/csv",
             headers={"Content-Disposition": f'attachment; filename="{filename}"'},
         )
     else:
         loop = asyncio.get_running_loop()
         try:
-            file_bytes = await loop.run_in_executor(None, partial(_build_xlsx, table_name, schema, database))
+            file_bytes = await loop.run_in_executor(None, partial(_build_xlsx, table_name, schema, database, token))
         except Exception as exc:
             raise HTTPException(status_code=500, detail=f"Failed to build XLSX: {exc}")
         return StreamingResponse(
@@ -292,4 +296,3 @@ async def download_table(
             media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
             headers={"Content-Disposition": f'attachment; filename="{filename}"'},
         )
-
