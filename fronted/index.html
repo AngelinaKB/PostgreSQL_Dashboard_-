@@ -723,7 +723,7 @@
     showEl(spinner, 'inline-block');
     schemaSel.innerHTML = '<option value="">Loading…</option>';
     try {
-      const res     = await fetch(`${API}/schemas/${database}`);
+      const res     = await apiFetch(`${API}/schemas/${database}`);
       const schemas = await res.json();
       schemaSel.innerHTML = schemas.map(s => `<option value="${s}">${s}</option>`).join('');
     } catch(e) {
