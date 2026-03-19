@@ -18,6 +18,7 @@ from pydantic import BaseModel, field_validator, model_validator
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db import get_db
+from app.utils import sniff_delimiter
 from app.models import StagingFile
 
 router = APIRouter()
@@ -225,11 +226,7 @@ async def define_schema(
             ext = os.path.splitext(filename)[-1].lower()
             if content_type in ("text/csv", "text/plain") or ext == ".txt":
                 sample = raw[:4096].decode("utf-8", errors="replace")
-                try:
-                    dialect = _csv.Sniffer().sniff(sample, delimiters=",;\t|")
-                    delimiter = dialect.delimiter
-                except _csv.Error:
-                    delimiter = ","
+                delimiter = sniff_delimiter(raw)
                 df = pd.read_csv(io.BytesIO(raw), sep=delimiter, dtype=str, keep_default_na=False, encoding="utf-8")
             else:
                 engine = "openpyxl" if ext == ".xlsx" else "xlrd"
@@ -345,13 +342,8 @@ async def infer_schema(
     def _infer(raw: bytes, content_type: str, filename: str) -> dict:
         ext = os.path.splitext(filename)[-1].lower()
         if content_type in ("text/csv", "text/plain") or ext == ".txt":
-            import csv as _csv
             sample = raw[:4096].decode("utf-8", errors="replace")
-            try:
-                dialect = _csv.Sniffer().sniff(sample, delimiters=",;\t|")
-                delimiter = dialect.delimiter
-            except _csv.Error:
-                delimiter = ","
+            delimiter = sniff_delimiter(raw)
             df = pd.read_csv(io.BytesIO(raw), sep=delimiter, encoding="utf-8")
         else:
             engine = "openpyxl" if ext == ".xlsx" else "xlrd"
