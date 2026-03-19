@@ -1025,11 +1025,29 @@
   }
 
   // ── download ──
-  function downloadTable(fmt) {
+  async function downloadTable(fmt) {
     if (!currentTableName) return;
-    const db  = document.getElementById('db-select')?.value   || currentTargetDb;
-    const sch = document.getElementById('schema-select')?.value || currentTargetSchema;
-    window.location.href = `${API}/download/${db}/${sch}/${currentTableName}?fmt=${fmt}`;
+    const db  = currentTargetDb;
+    const sch = currentTargetSchema;
+    try {
+      const res = await apiFetch(`${API}/download/${db}/${sch}/${currentTableName}?fmt=${fmt}`);
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({ detail: 'Download failed' }));
+        alert(err.detail || 'Download failed');
+        return;
+      }
+      const blob     = await res.blob();
+      const url      = URL.createObjectURL(blob);
+      const a        = document.createElement('a');
+      a.href         = url;
+      a.download     = `${currentTableName}.${fmt}`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    } catch(e) {
+      alert('Download error: ' + e.message);
+    }
   }
 
   // ── manual row entry ──
