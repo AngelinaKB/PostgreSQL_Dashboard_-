@@ -13,6 +13,7 @@ and runs pandas in a thread pool so the async event loop is never blocked.
 
 import asyncio
 import csv
+from app.utils import sniff_delimiter, fmt_delimiter
 import io
 import os
 from functools import partial
@@ -53,14 +54,7 @@ class FileDetailsResponse(BaseModel):
 # Sync parsing helpers (run in thread pool)
 # ---------------------------------------------------------------------------
 
-def _sniff_delimiter(raw: bytes) -> str:
-    """Use csv.Sniffer on the first 4 KB to detect delimiter."""
-    sample = raw[:4096].decode("utf-8", errors="replace")
-    try:
-        dialect = csv.Sniffer().sniff(sample, delimiters=",;\t|")
-        return dialect.delimiter
-    except csv.Error:
-        return ","  # fallback
+# _sniff_delimiter imported from app.utils  # fallback
 
 
 def _parse_csv(raw: bytes, delimiter: str) -> tuple[list[str], list[dict]]:
@@ -99,13 +93,13 @@ def _do_parse(
     ext = os.path.splitext(filename)[-1].lower()
 
     if content_type in ("text/csv",) or ext == ".txt":
-        delimiter = delimiter_override or _sniff_delimiter(raw)
+        delimiter = delimiter_override or sniff_delimiter(raw)
         try:
             columns, rows = _parse_csv(raw, delimiter)
         except Exception as exc:
             raise ValueError(f"Could not parse file: {exc}") from exc
         return {
-            "detected_delimiter": delimiter if ext != ".txt" else None,
+            "detected_delimiter": delimiter,
             "extension": ext if ext == ".txt" else None,
             "columns": columns,
             "preview_rows": rows,
