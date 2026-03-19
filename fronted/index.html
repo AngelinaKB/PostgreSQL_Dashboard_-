@@ -588,6 +588,10 @@
   }
 
   function saveConn() {
+    if (!sessionToken) {
+      showErr(document.getElementById('conn-err'), 'Test & Connect successfully before saving.');
+      return;
+    }
     const name = document.getElementById('conn-name').value.trim() || 'Connection';
     const conn = {
       name,
@@ -603,7 +607,6 @@
     else list.push(conn);
     setSavedConns(list);
     renderSavedConnDropdown();
-    // Select the saved one
     const sel = document.getElementById('saved-conn-select');
     sel.value = String(existing >= 0 ? existing : list.length - 1);
   }
@@ -746,6 +749,13 @@
       renderSchemaEditor(schema);
       showEl(schemaCard);
       setStep(3);
+      // Show any schema-level warnings (e.g. column count > 1600)
+      if (schema.warnings && schema.warnings.length > 0) {
+        const warnEl = document.getElementById('schema-warnings');
+        warnEl.innerHTML = '<strong>Warning</strong><ul>' +
+          schema.warnings.map(w => `<li>${w}</li>`).join('') + '</ul>';
+        showEl(warnEl);
+      }
       // Load available databases + schemas
       loadDatabases();
     } catch(e) {
