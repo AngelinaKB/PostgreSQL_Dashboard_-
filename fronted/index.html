@@ -705,7 +705,7 @@
     const spinner   = document.getElementById('db-spinner');
     showEl(spinner, 'inline-block');
     try {
-      const res  = await apiFetch(`${API}/databases`);
+      const res  = await apiFetch(`${API}/meta/databases`);
       const dbs  = await res.json();
       dbSel.innerHTML = dbs.map(d => `<option value="${d}">${d}</option>`).join('');
       // Auto-load schemas for the first db
@@ -723,7 +723,7 @@
     showEl(spinner, 'inline-block');
     schemaSel.innerHTML = '<option value="">Loading…</option>';
     try {
-      const res     = await apiFetch(`${API}/schemas/${database}`);
+      const res     = await apiFetch(`${API}/meta/schemas/${database}`);
       const schemas = await res.json();
       schemaSel.innerHTML = schemas.map(s => `<option value="${s}">${s}</option>`).join('');
     } catch(e) {
