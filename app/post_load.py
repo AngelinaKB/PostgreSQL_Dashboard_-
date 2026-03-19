@@ -27,7 +27,7 @@ import asyncio
 import pandas as pd
 import psycopg2
 import psycopg2.extras
-from fastapi import APIRouter, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from fastapi.responses import StreamingResponse
 
 from app.config import settings
