@@ -1,31 +1,24 @@
 """
 app/discovery.py
 ----------------
-Endpoints to auto-discover databases and schemas on the PostgreSQL server.
-
 GET /databases          — list all databases on the server
 GET /schemas/{database} — list all schemas inside a specific database
+GET /tables/{database}/{schema} — list all tables inside a schema
 
-Both connect with the credentials from settings (same PG server, different db).
-System databases (postgres, template0, template1) are excluded.
-System schemas (pg_*, information_schema) are excluded.
+Uses user session credentials (X-Session-Token header).
 """
 
 import psycopg2
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 
-from app.config import settings
+from app.session import require_session, session_pg_connect
 
 router = APIRouter()
 
 
 @router.get("/databases", summary="List all databases on the PostgreSQL server")
-def list_databases() -> list[str]:
-    """
-    Returns all user-created databases on the server.
-    Excludes: postgres, template0, template1.
-    """
-    conn = settings.pg_connect()
+def list_databases(token: str = Depends(require_session)) -> list[str]:
+    conn = session_pg_connect(token)
     try:
         with conn.cursor() as cur:
             cur.execute("""
@@ -43,13 +36,9 @@ def list_databases() -> list[str]:
 
 
 @router.get("/schemas/{database}", summary="List all schemas inside a database")
-def list_schemas(database: str) -> list[str]:
-    """
-    Connects to the specified database and returns all user-created schemas.
-    Excludes: pg_*, information_schema, pg_catalog.
-    """
+def list_schemas(database: str, token: str = Depends(require_session)) -> list[str]:
     try:
-        conn = settings.pg_connect(dbname=database)
+        conn = session_pg_connect(token, dbname=database)
     except psycopg2.OperationalError as exc:
         raise HTTPException(status_code=404, detail=f"Cannot connect to database '{database}': {exc}")
     try:
@@ -64,5 +53,27 @@ def list_schemas(database: str) -> list[str]:
             return [row[0] for row in cur.fetchall()]
     except Exception as exc:
         raise HTTPException(status_code=500, detail=f"Failed to list schemas: {exc}")
+    finally:
+        conn.close()
+
+
+@router.get("/tables/{database}/{schema}", summary="List all tables inside a schema")
+def list_tables(database: str, schema: str, token: str = Depends(require_session)) -> list[str]:
+    try:
+        conn = session_pg_connect(token, dbname=database)
+    except psycopg2.OperationalError as exc:
+        raise HTTPException(status_code=404, detail=f"Cannot connect to database '{database}': {exc}")
+    try:
+        with conn.cursor() as cur:
+            cur.execute("""
+                SELECT table_name
+                FROM information_schema.tables
+                WHERE table_schema = %s
+                  AND table_type = 'BASE TABLE'
+                ORDER BY table_name
+            """, (schema,))
+            return [row[0] for row in cur.fetchall()]
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Failed to list tables: {exc}")
     finally:
         conn.close()
