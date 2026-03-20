@@ -21,6 +21,8 @@ from fastapi import Header, HTTPException
 
 # ── in-memory store ──────────────────────────────────────────────────────────
 # { token: SessionCredentials }
+# NOTE: In-memory store — sessions are lost on server restart.
+# For multi-worker deployments, replace with Redis or a DB-backed store.
 _store: dict[str, "SessionCredentials"] = {}
 _lock  = threading.Lock()
 
