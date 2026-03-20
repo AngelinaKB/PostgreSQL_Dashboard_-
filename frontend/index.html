@@ -136,8 +136,6 @@
     .file-xls   { background: #0d3326; color: #6ecfab; }
     .file-xlsx  { background: #0d3326; color: #6ecfab; }
     .file-txt   { background: var(--bg-info); color: var(--text-info); }
-    .file-json  { background: #2a1f42; color: #c4a0f5; }
-    .file-jsonl { background: #2a1f42; color: #c4a0f5; }
     .file-other { background: var(--bg-secondary); color: var(--text-secondary); }
     .spinner { display: inline-block; width: 14px; height: 14px; border: 2px solid var(--border-md); border-top-color: var(--text); border-radius: 50%; animation: spin 0.7s linear infinite; }
     @keyframes spin { to { transform: rotate(360deg); } }
@@ -174,6 +172,9 @@
       .saved-conn-row select { width: 100%; }
       .saved-conn-row .btn { width: 100%; justify-content: center; }
       .conn-status { flex-direction: column; align-items: flex-start; gap: 6px; }
+    }
+    @media (max-width: 600px) {
+      #insert-selectors { grid-template-columns: 1fr !important; }
     }
     @media (max-width: 768px) {
       .page { padding: 1rem 0.75rem; }
@@ -212,6 +213,7 @@
     <a class="navbar-link" href="#upload-card">Upload</a>
     <a class="navbar-link" href="#schema-card">Schema</a>
     <a class="navbar-link" href="#post-load-card">Post-load</a>
+    <a class="navbar-link" href="#insert-card">Insert</a>
     <a class="navbar-link" href="#history-card">History</a>
   </div>
   <div class="navbar-right">
@@ -229,6 +231,7 @@
   <a href="#upload-card"   onclick="closeMobileMenu()">Upload</a>
   <a href="#schema-card"   onclick="closeMobileMenu()">Schema</a>
   <a href="#post-load-card" onclick="closeMobileMenu()">Post-load</a>
+  <a href="#insert-card"   onclick="closeMobileMenu()">Insert</a>
   <a href="#history-card"  onclick="closeMobileMenu()">History</a>
 </div>
 
@@ -311,8 +314,8 @@
     <div class="drop-zone" id="drop-zone" onclick="document.getElementById('file-input').click()">
       <svg class="drop-icon" viewBox="0 0 40 40" fill="none"><path d="M20 26V14M20 14L15 19M20 14L25 19" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/><path d="M10 31H30M7 22C5.34 20.4 5 18.1 5 16.5C5 11.8 8.8 8 13.5 8C13.9 8 14.3 8.02 14.7 8.07C16.1 5.4 18.9 3.5 22.2 3.5C26.9 3.5 30.7 7.3 30.7 12C30.7 12.3 30.68 12.58 30.65 12.86C33.5 13.8 35.5 16.5 35.5 19.5C35.5 21.6 34.5 23.5 33 24.8" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
       <div class="drop-title">Drop your file here or click to browse</div>
-      <div class="drop-sub">Accepts <b>.csv</b>, <b>.xls</b>, <b>.xlsx</b>, <b>.txt</b>, <b>.json</b>, <b>.jsonl</b> &nbsp;·&nbsp; Max 50 MB</div>
-      <input type="file" id="file-input" accept=".csv,.xls,.xlsx,.txt,.json,.jsonl">
+      <div class="drop-sub">Accepts <b>.csv</b>, <b>.xls</b>, <b>.xlsx</b>, <b>.txt</b> &nbsp;·&nbsp; Max 50 MB</div>
+      <input type="file" id="file-input" accept=".csv,.xls,.xlsx,.txt">
     </div>
     <div class="progress-wrap" id="progress-wrap">
       <div class="progress-bar-bg"><div class="progress-bar-fill" id="progress-fill"></div></div>
@@ -453,6 +456,71 @@
   <!-- Back to top -->
   <div style="text-align:center;margin-bottom:1.5rem;display:none" id="back-to-top-wrap">
     <button class="btn" onclick="window.scrollTo({top:0,behavior:'smooth'})">↑ Back to top</button>
+  </div>
+
+  <!-- Insert into existing table -->
+  <div class="card" id="insert-card">
+    <div class="result-header" style="margin-bottom:1rem">
+      <div class="result-icon" style="background:var(--bg-warning)">
+        <svg fill="none" viewBox="0 0 18 18"><path d="M9 3v12M3 9h12" stroke="var(--text-warning)" stroke-width="1.5" stroke-linecap="round"/></svg>
+      </div>
+      <div>
+        <div class="result-title">Insert into existing table</div>
+        <div class="result-sub">Select a table from any connected database and manually insert rows</div>
+      </div>
+    </div>
+
+    <!-- Cascading selectors -->
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:1rem" id="insert-selectors">
+      <div>
+        <div class="field-label" style="font-size:11px;color:var(--text-tertiary);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:4px">Database</div>
+        <select id="insert-db-select" onchange="onInsertDbChange()" style="width:100%;font-size:13px;padding:7px 10px;border:0.5px solid var(--border-md);border-radius:var(--radius-md);background:var(--bg-secondary);color:var(--text)">
+          <option value="">— select —</option>
+        </select>
+      </div>
+      <div>
+        <div class="field-label" style="font-size:11px;color:var(--text-tertiary);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:4px">Schema</div>
+        <select id="insert-schema-select" onchange="onInsertSchemaChange()" style="width:100%;font-size:13px;padding:7px 10px;border:0.5px solid var(--border-md);border-radius:var(--radius-md);background:var(--bg-secondary);color:var(--text)" disabled>
+          <option value="">— select db first —</option>
+        </select>
+      </div>
+      <div>
+        <div class="field-label" style="font-size:11px;color:var(--text-tertiary);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:4px">Table</div>
+        <select id="insert-table-select" onchange="onInsertTableChange()" style="width:100%;font-size:13px;padding:7px 10px;border:0.5px solid var(--border-md);border-radius:var(--radius-md);background:var(--bg-secondary);color:var(--text)" disabled>
+          <option value="">— select schema first —</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="err-banner" id="insert-sel-err"></div>
+
+    <!-- Column form — shown after table selected -->
+    <div id="insert-form-wrap" style="display:none">
+      <hr class="divider">
+      <div class="section-title" style="margin-bottom:0.75rem" id="insert-form-title">Add rows</div>
+      <div id="insert-form-fields" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:10px;margin-bottom:1rem"></div>
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:1rem;flex-wrap:wrap">
+        <button class="btn btn-primary" onclick="addInsertRowToStaging()">+ Add row</button>
+        <span id="insert-staged-count" style="font-size:13px;color:var(--text-secondary)"></span>
+      </div>
+
+      <!-- Staged rows -->
+      <div id="insert-staged-wrap" style="display:none;margin-bottom:1rem">
+        <div style="font-size:13px;font-weight:500;margin-bottom:8px;color:var(--text-secondary)">Rows to insert</div>
+        <div class="table-wrap">
+          <table><thead id="insert-staged-thead"></thead><tbody id="insert-staged-tbody"></tbody></table>
+        </div>
+      </div>
+
+      <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+        <button class="btn btn-success" id="btn-insert-existing" onclick="insertIntoExisting()" style="display:none">Insert all rows →</button>
+        <button class="btn" id="btn-clear-insert" onclick="clearInsertStaged()" style="display:none">Clear</button>
+        <span id="insert-spinner" style="display:none"><span class="spinner"></span></span>
+      </div>
+      <div class="job-status-bar" id="insert-job-bar"><span class="spinner"></span><span id="insert-job-msg">Working…</span></div>
+      <div class="err-banner" id="insert-err" style="margin-top:1rem"></div>
+      <div class="ok-banner"  id="insert-ok"  style="margin-top:1rem"></div>
+    </div>
   </div>
 
   <!-- History -->
@@ -728,6 +796,8 @@
     // Unlock main content
     document.getElementById('main-content').classList.remove('page-overlay');
     hideErr(document.getElementById('conn-err'));
+    // Load databases for insert section
+    loadInsertDatabases();
   }
 
   function setDisconnected() {
@@ -805,6 +875,187 @@
   // ── page init ──
   renderSavedConnDropdown();
   restoreSession();
+  // ── insert into existing table ──
+  let insertColSchema  = [];
+  let insertStagedRows = [];
+  let insertTarget     = { db: null, schema: null, table: null };
+
+  async function loadInsertDatabases() {
+    const sel = document.getElementById('insert-db-select');
+    if (!sessionToken) return;
+    try {
+      const res = await apiFetch(`${API}/meta/databases`);
+      if (!res.ok) return;
+      const dbs = await res.json();
+      sel.innerHTML = '<option value="">— select —</option>' +
+        dbs.map(d => `<option value="${d}">${d}</option>`).join('');
+    } catch(e) {}
+  }
+
+  async function onInsertDbChange() {
+    const db     = document.getElementById('insert-db-select').value;
+    const schSel = document.getElementById('insert-schema-select');
+    const tblSel = document.getElementById('insert-table-select');
+    schSel.innerHTML = '<option value="">— loading… —</option>';
+    schSel.disabled  = true;
+    tblSel.innerHTML = '<option value="">— select schema first —</option>';
+    tblSel.disabled  = true;
+    hideInsertForm();
+    if (!db) return;
+    try {
+      const res     = await apiFetch(`${API}/meta/schemas/${db}`);
+      const schemas = await res.json();
+      schSel.innerHTML = '<option value="">— select —</option>' +
+        schemas.map(s => `<option value="${s}">${s}</option>`).join('');
+      schSel.disabled = false;
+    } catch(e) { schSel.innerHTML = '<option value="">Failed to load</option>'; }
+  }
+
+  async function onInsertSchemaChange() {
+    const db     = document.getElementById('insert-db-select').value;
+    const schema = document.getElementById('insert-schema-select').value;
+    const tblSel = document.getElementById('insert-table-select');
+    tblSel.innerHTML = '<option value="">— loading… —</option>';
+    tblSel.disabled  = true;
+    hideInsertForm();
+    if (!schema) return;
+    try {
+      const res    = await apiFetch(`${API}/meta/tables/${db}/${schema}`);
+      const tables = await res.json();
+      tblSel.innerHTML = '<option value="">— select —</option>' +
+        tables.map(t => `<option value="${t}">${t}</option>`).join('');
+      tblSel.disabled = false;
+    } catch(e) { tblSel.innerHTML = '<option value="">Failed to load</option>'; }
+  }
+
+  async function onInsertTableChange() {
+    const db     = document.getElementById('insert-db-select').value;
+    const schema = document.getElementById('insert-schema-select').value;
+    const table  = document.getElementById('insert-table-select').value;
+    hideInsertForm();
+    hideErr(document.getElementById('insert-sel-err'));
+    if (!table) return;
+    insertTarget = { db, schema, table };
+    insertStagedRows = [];
+    try {
+      const res = await apiFetch(`${API}/meta/columns/${db}/${schema}/${table}`);
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({ detail: 'Failed to load columns' }));
+        showErr(document.getElementById('insert-sel-err'), err.detail); return;
+      }
+      const cols = await res.json();
+      insertColSchema = cols;
+      buildInsertForm(cols);
+      document.getElementById('insert-form-title').textContent = `Add rows to ${schema}.${table}`;
+      showEl(document.getElementById('insert-form-wrap'));
+    } catch(e) {
+      showErr(document.getElementById('insert-sel-err'), 'Could not load columns: ' + e.message);
+    }
+  }
+
+  function hideInsertForm() {
+    hideEl(document.getElementById('insert-form-wrap'));
+    insertColSchema = []; insertStagedRows = [];
+    renderInsertStagedRows();
+  }
+
+  function buildInsertForm(cols) {
+    document.getElementById('insert-form-fields').innerHTML = cols.map(col => `
+      <div>
+        <div style="font-size:11px;color:var(--text-tertiary);text-transform:uppercase;letter-spacing:0.04em;margin-bottom:4px">
+          ${col.name} <span style="font-family:var(--font-mono);font-size:10px;background:var(--bg-secondary);padding:1px 5px;border-radius:4px">${col.sql_type}</span>
+        </div>
+        <input type="text" id="insert-field-${col.name}"
+          placeholder="${TYPE_PLACEHOLDERS[col.sql_type] || ''}"
+          autocomplete="off" spellcheck="false"
+          style="width:100%;padding:6px 10px;font-size:13px;font-family:var(--font-mono);border:0.5px solid var(--border-md);border-radius:var(--radius-md);background:var(--bg-secondary);color:var(--text)">
+      </div>
+    `).join('');
+  }
+
+  function addInsertRowToStaging() {
+    const row = {}; let hasError = false;
+    for (const col of insertColSchema) {
+      const input = document.getElementById(`insert-field-${col.name}`);
+      const val   = input ? input.value.trim() : '';
+      if (val !== '') {
+        const validator = TYPE_VALIDATORS[col.sql_type];
+        if (validator && !validator(val)) {
+          if (input) { input.style.borderColor = 'var(--text-danger)'; input.style.background = 'var(--bg-danger)'; }
+          hasError = true; continue;
+        }
+      }
+      if (input) { input.style.borderColor = ''; input.style.background = ''; }
+      row[col.name] = val === '' ? null : val;
+    }
+    if (hasError) { showErr(document.getElementById('insert-err'), 'Some values have incorrect types.'); return; }
+    hideErr(document.getElementById('insert-err'));
+    insertStagedRows.push(row);
+    renderInsertStagedRows();
+    insertColSchema.forEach(col => { const i = document.getElementById(`insert-field-${col.name}`); if (i) i.value = ''; });
+    const first = document.getElementById(`insert-field-${insertColSchema[0]?.name}`);
+    if (first) first.focus();
+  }
+
+  function renderInsertStagedRows() {
+    const wrap  = document.getElementById('insert-staged-wrap');
+    const count = document.getElementById('insert-staged-count');
+    const btnI  = document.getElementById('btn-insert-existing');
+    const btnC  = document.getElementById('btn-clear-insert');
+    if (!wrap) return;
+    if (insertStagedRows.length === 0) { hideEl(wrap); hideEl(btnI); hideEl(btnC); count.textContent = ''; return; }
+    const cols = insertColSchema.map(c => c.name);
+    document.getElementById('insert-staged-thead').innerHTML = '<tr>' + cols.map(c => `<th>${c}</th>`).join('') + '<th></th></tr>';
+    document.getElementById('insert-staged-tbody').innerHTML = insertStagedRows.map((row, i) =>
+      '<tr>' + cols.map(c => `<td>${row[c] === null ? '<span class="null-cell">null</span>' : row[c]}</td>`).join('') +
+      `<td><button onclick="removeInsertRow(${i})" style="font-size:11px;background:none;border:none;color:var(--text-danger);cursor:pointer">✕</button></td></tr>`
+    ).join('');
+    count.textContent = `${insertStagedRows.length} row${insertStagedRows.length > 1 ? 's' : ''} staged`;
+    showEl(wrap); showEl(btnI, 'inline-flex'); showEl(btnC, 'inline-flex');
+  }
+
+  function removeInsertRow(idx) { insertStagedRows.splice(idx, 1); renderInsertStagedRows(); }
+
+  function clearInsertStaged() {
+    insertStagedRows = []; renderInsertStagedRows();
+    hideEl(document.getElementById('insert-ok'));
+    hideErr(document.getElementById('insert-err'));
+  }
+
+  async function insertIntoExisting() {
+    if (!insertTarget.table || insertStagedRows.length === 0) return;
+    const { db, schema, table } = insertTarget;
+    const spinner = document.getElementById('insert-spinner');
+    const jobBar  = document.getElementById('insert-job-bar');
+    const jobMsg  = document.getElementById('insert-job-msg');
+    const errEl   = document.getElementById('insert-err');
+    const okEl    = document.getElementById('insert-ok');
+    hideErr(errEl); hideEl(okEl); hideEl(jobBar);
+    showEl(spinner, 'inline-block');
+    try {
+      const res  = await apiFetch(`${API}/append/${db}/${schema}/${table}`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ rows: insertStagedRows }),
+      });
+      const data = await res.json();
+      if (!res.ok) { showErr(errEl, data.detail || 'Insert failed.'); hideEl(spinner); return; }
+      hideEl(spinner);
+      jobMsg.textContent = 'Inserting rows…';
+      showEl(jobBar, 'flex');
+      pollJob(
+        data.job_id,
+        (result) => {
+          hideEl(jobBar);
+          okEl.textContent = `✓ ${result.rows_inserted.toLocaleString()} row${result.rows_inserted > 1 ? 's' : ''} inserted into ${result.table_name}.`;
+          showEl(okEl);
+          insertStagedRows = []; renderInsertStagedRows();
+        },
+        (msg) => { hideEl(jobBar); showErr(errEl, msg); },
+        jobMsg,
+      );
+    } catch(e) { hideEl(spinner); showErr(errEl, 'Could not reach API: ' + e.message); }
+  }
+
   async function loadDatabases() {
     const dbSel     = document.getElementById('db-select');
     const schemaSel = document.getElementById('schema-select');
@@ -1063,7 +1314,7 @@
   function addHistory(details) {
     historyEmpty.style.display = 'none';
     const ext = fileExt(details.filename);
-    const cls = ['csv','xls','xlsx','txt','json','jsonl'].includes(ext) ? 'file-'+ext : 'file-other';
+    const cls = ['csv','xls','xlsx','txt'].includes(ext) ? 'file-'+ext : 'file-other';
     const item = document.createElement('div');
     item.className = 'history-item';
     item.innerHTML = `
