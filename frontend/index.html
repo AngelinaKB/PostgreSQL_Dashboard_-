@@ -498,6 +498,18 @@
     <div id="insert-form-wrap" style="display:none">
       <hr class="divider">
       <div class="section-title" style="margin-bottom:0.75rem" id="insert-form-title">Add rows</div>
+
+      <!-- Table preview -->
+      <div id="insert-preview-wrap" style="margin-bottom:1.25rem">
+        <div style="font-size:13px;font-weight:500;margin-bottom:8px;color:var(--text-secondary)">
+          Last 3 rows <span id="insert-preview-spinner" style="display:none"><span class="spinner"></span></span>
+        </div>
+        <div class="table-wrap" id="insert-preview-table-wrap">
+          <table><thead id="insert-preview-thead"></thead><tbody id="insert-preview-tbody"></tbody></table>
+        </div>
+        <div class="err-banner" id="insert-preview-err"></div>
+      </div>
+
       <div id="insert-form-fields" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:10px;margin-bottom:1rem"></div>
       <div style="display:flex;align-items:center;gap:10px;margin-bottom:1rem;flex-wrap:wrap">
         <button class="btn btn-primary" onclick="addInsertRowToStaging()">+ Add row</button>
@@ -937,20 +949,54 @@
     if (!table) return;
     insertTarget = { db, schema, table };
     insertStagedRows = [];
+
     try {
-      const res = await apiFetch(`${API}/meta/columns/${db}/${schema}/${table}`);
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({ detail: 'Failed to load columns' }));
+      // Fetch columns and preview in parallel
+      const [colsRes, previewRes] = await Promise.all([
+        apiFetch(`${API}/meta/columns/${db}/${schema}/${table}`),
+        apiFetch(`${API}/meta/preview/${db}/${schema}/${table}`),
+      ]);
+
+      if (!colsRes.ok) {
+        const err = await colsRes.json().catch(() => ({ detail: 'Failed to load columns' }));
         showErr(document.getElementById('insert-sel-err'), err.detail); return;
       }
-      const cols = await res.json();
+
+      const cols    = await colsRes.json();
       insertColSchema = cols;
       buildInsertForm(cols);
       document.getElementById('insert-form-title').textContent = `Add rows to ${schema}.${table}`;
       showEl(document.getElementById('insert-form-wrap'));
+
+      // Render preview
+      if (previewRes.ok) {
+        const preview = await previewRes.json();
+        renderInsertPreview(preview.columns, preview.rows);
+      } else {
+        hideEl(document.getElementById('insert-preview-wrap'));
+      }
+
     } catch(e) {
       showErr(document.getElementById('insert-sel-err'), 'Could not load columns: ' + e.message);
     }
+  }
+
+  function renderInsertPreview(columns, rows) {
+    const thead = document.getElementById('insert-preview-thead');
+    const tbody = document.getElementById('insert-preview-tbody');
+    if (!columns.length) { hideEl(document.getElementById('insert-preview-wrap')); return; }
+    thead.innerHTML = '<tr>' + columns.map(c => `<th>${c}</th>`).join('') + '</tr>';
+    if (!rows.length) {
+      tbody.innerHTML = `<tr><td colspan="${columns.length}" style="text-align:center;color:var(--text-tertiary);font-style:italic">Table is empty</td></tr>`;
+    } else {
+      tbody.innerHTML = rows.map(row =>
+        '<tr>' + columns.map(c => {
+          const v = row[c];
+          return (v === null || v === undefined) ? '<td class="null-cell">null</td>' : `<td>${v}</td>`;
+        }).join('') + '</tr>'
+      ).join('');
+    }
+    showEl(document.getElementById('insert-preview-wrap'));
   }
 
   function hideInsertForm() {
@@ -1049,6 +1095,10 @@
           okEl.textContent = `✓ ${result.rows_inserted.toLocaleString()} row${result.rows_inserted > 1 ? 's' : ''} inserted into ${result.table_name}.`;
           showEl(okEl);
           insertStagedRows = []; renderInsertStagedRows();
+          // Refresh preview to show new rows
+          const { db, schema, table } = insertTarget;
+          apiFetch(`${API}/meta/preview/${db}/${schema}/${table}`)
+            .then(r => r.json()).then(p => renderInsertPreview(p.columns, p.rows)).catch(() => {});
         },
         (msg) => { hideEl(jobBar); showErr(errEl, msg); },
         jobMsg,
