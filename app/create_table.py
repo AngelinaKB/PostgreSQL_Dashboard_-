@@ -16,7 +16,10 @@ POST /create-table/{file_id}
 
 import asyncio
 import csv
+import logging
 from app.utils import sniff_delimiter
+
+logger = logging.getLogger("data_ingestion")
 import io
 import os
 import re
@@ -383,12 +386,7 @@ def _create_table_job(
     col_names      = [c.new_name      for c in resolved_cols]
     original_names = [c.original_name for c in columns]
 
-    import logging as _log2
-    _log2.getLogger("data_ingestion").info(
-        f"DDL to execute (db={target_database}, schema={target_schema}):\n{ddl}"
-    )
-    _log2.getLogger("data_ingestion").info(f"col_names: {col_names}")
-    _log2.getLogger("data_ingestion").info(f"original_names: {original_names}")
+    logger.debug("DDL target: db=%s schema=%s table=%s cols=%s", target_database, target_schema, table_name, col_names)
 
     # Parse file
     rows = _parse_to_rows(
