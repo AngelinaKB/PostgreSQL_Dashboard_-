@@ -32,11 +32,11 @@
     .navbar-link { font-size: 13px; color: var(--text-secondary); text-decoration: none; padding: 5px 10px; border-radius: var(--radius-md); transition: background 0.1s, color 0.1s; white-space: nowrap; }
     .navbar-link:hover { background: var(--bg-secondary); color: var(--text); }
     .navbar-conn-label { font-size: 12px; }
-    .navbar-hamburger { display: none; background: none; border: none; cursor: pointer; padding: 6px; color: var(--text); flex-direction: column; gap: 4px; }
-    .navbar-hamburger span { display: block; width: 20px; height: 1.5px; background: currentColor; border-radius: 2px; transition: all 0.2s; }
-    .mobile-menu { display: none; position: absolute; top: 52px; left: 0; right: 0; background: var(--bg); border-bottom: 0.5px solid var(--border); flex-direction: column; z-index: 99; box-shadow: 0 4px 12px rgba(0,0,0,0.3); }
+    .navbar-hamburger { display: none; background: var(--bg-secondary); border: 0.5px solid var(--border-md); border-radius: var(--radius-md); cursor: pointer; padding: 9px 12px; color: var(--text); gap: 5px; align-items: center; justify-content: center; flex-direction: column; min-width: 40px; min-height: 36px; }
+    .navbar-hamburger span { display: block; width: 18px; height: 2px; background: var(--text); border-radius: 2px; }
+    .mobile-menu { display: none; position: fixed; top: 52px; left: 0; right: 0; background: var(--bg); border-bottom: 0.5px solid var(--border); flex-direction: column; z-index: 999; box-shadow: 0 8px 24px rgba(0,0,0,0.4); }
     .mobile-menu.open { display: flex; }
-    .mobile-menu a { padding: 13px 1.5rem; font-size: 14px; color: var(--text-secondary); text-decoration: none; border-bottom: 0.5px solid var(--border); transition: background 0.1s; }
+    .mobile-menu a { padding: 16px 1.5rem; font-size: 15px; color: var(--text); text-decoration: none; border-bottom: 0.5px solid var(--border); transition: background 0.1s; display: block; }
     .mobile-menu a:last-child { border-bottom: none; }
     .mobile-menu a:hover { background: var(--bg-secondary); color: var(--text); }
     @media (max-width: 900px) {
@@ -46,7 +46,7 @@
     @media (max-width: 680px) {
       .navbar-links { display: none; }
       .navbar-conn-label { display: none; }
-      .navbar-hamburger { display: flex; }
+      .navbar-hamburger { display: flex !important; }
     }
     @media (max-width: 480px) {
       .navbar { height: 46px; }
@@ -1297,3 +1297,4 @@
 </script>
 </body>
 </html>
+
