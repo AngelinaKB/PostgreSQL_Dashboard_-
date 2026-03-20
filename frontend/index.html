@@ -73,7 +73,7 @@
     .progress-wrap { margin-top: 1.25rem; display: none; }
     .progress-bar-bg   { height: 4px; background: var(--bg-secondary); border-radius: 4px; overflow: hidden; }
     .progress-bar-fill { height: 100%; width: 0%; background: var(--text); border-radius: 4px; transition: width 0.2s ease; }
-    .progress-label    { font-size: 12px; color: var(--text-secondary); margin-top: 7px; }
+    .progress-label    { font-size: 12px; color: var(--text-secondary); margin-top: 7px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .err-banner  { background: var(--bg-danger);  border: 0.5px solid var(--border-danger);  border-radius: var(--radius-md); padding: 10px 14px; font-size: 13px; color: var(--text-danger);  margin-top: 1rem; display: none; }
     .warn-banner { background: var(--bg-warning); border: 0.5px solid var(--border-warning); border-radius: var(--radius-md); padding: 10px 14px; font-size: 13px; color: var(--text-warning); margin-top: 1rem; display: none; }
     .warn-banner ul { margin: 4px 0 0 16px; } .warn-banner li { margin-top: 2px; }
@@ -84,13 +84,14 @@
     .field  { background: var(--bg-secondary); border-radius: var(--radius-md); padding: 12px 14px; }
     .field-full { grid-column: 1 / -1; }
     .field-label { font-size: 11px; color: var(--text-tertiary); text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 5px; }
-    .field-value { font-size: 14px; font-weight: 500; word-break: break-all; }
-    .field-mono  { font-family: var(--font-mono); font-size: 12px; font-weight: 400; }
-    .result-header { display: flex; align-items: center; gap: 12px; margin-bottom: 1.25rem; padding-bottom: 1.25rem; border-bottom: 0.5px solid var(--border); }
+    .field-value { font-size: 14px; font-weight: 500; word-break: break-word; overflow-wrap: anywhere; min-width: 0; }
+    .field-mono  { font-family: var(--font-mono); font-size: 12px; font-weight: 400; word-break: break-all; overflow-wrap: anywhere; }
+    .result-header { display: flex; align-items: center; gap: 12px; margin-bottom: 1.25rem; padding-bottom: 1.25rem; border-bottom: 0.5px solid var(--border); min-width: 0; }
     .result-icon   { width: 36px; height: 36px; border-radius: var(--radius-md); background: var(--bg-success); display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
     .result-icon svg { width: 18px; height: 18px; }
-    .result-title { font-size: 15px; font-weight: 500; }
-    .result-sub   { font-size: 12px; color: var(--text-secondary); margin-top: 2px; }
+    .result-title { font-size: 15px; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 100%; }
+    .result-sub   { font-size: 12px; color: var(--text-secondary); margin-top: 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .result-header > div { min-width: 0; }
     .badge { display: inline-flex; align-items: center; padding: 3px 10px; border-radius: 20px; font-size: 12px; font-weight: 500; }
     .badge-success { background: var(--bg-success); color: var(--text-success); }
     .badge-info    { background: var(--bg-info);    color: var(--text-info); }
@@ -127,10 +128,10 @@
     .schema-actions { display: flex; align-items: center; gap: 10px; margin-top: 1.25rem; flex-wrap: wrap; }
     .history-empty { font-size: 13px; color: var(--text-tertiary); text-align: center; padding: 1.5rem 0; }
     .history-list  { display: flex; flex-direction: column; gap: 8px; }
-    .history-item  { display: flex; align-items: center; gap: 12px; padding: 10px 12px; border: 0.5px solid var(--border); border-radius: var(--radius-md); cursor: pointer; transition: background 0.1s; }
+    .history-item  { display: flex; align-items: center; gap: 8px; padding: 10px 12px; border: 0.5px solid var(--border); border-radius: var(--radius-md); cursor: pointer; transition: background 0.1s; min-width: 0; }
     .history-item:hover { background: var(--bg-secondary); }
-    .history-name { flex: 1; font-size: 13px; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-    .history-meta { font-size: 12px; color: var(--text-secondary); white-space: nowrap; }
+    .history-name { flex: 1; min-width: 0; font-size: 13px; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .history-meta { font-size: 12px; color: var(--text-secondary); white-space: nowrap; flex-shrink: 0; }
     .file-icon  { width: 30px; height: 30px; border-radius: 6px; display: flex; align-items: center; justify-content: center; font-size: 10px; font-weight: 500; flex-shrink: 0; }
     .file-csv   { background: var(--bg-success); color: var(--text-success); }
     .file-xls   { background: #0d3326; color: #6ecfab; }
