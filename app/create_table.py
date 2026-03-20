@@ -234,7 +234,8 @@ def _parse_to_rows(
         )
     df = df[available]
 
-    # Replace NaN with None
+    # Replace NaN AND empty strings with None so numeric columns get NULL not ''
+    df = df.replace("", None)
     df = df.where(pd.notnull(df), None)
 
     return [tuple(row) for row in df.itertuples(index=False, name=None)]
