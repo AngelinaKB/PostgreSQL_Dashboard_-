@@ -224,15 +224,7 @@ async def define_schema(
         def _check_pk_unique(raw: bytes, content_type: str, filename: str, col_original: str) -> int | None:
             """Returns the number of duplicate values if any, else None."""
             ext = os.path.splitext(filename)[-1].lower()
-            if ext in (".json", ".jsonl"):
-                import json as _json
-                if ext == ".jsonl":
-                    lines = [l.strip() for l in raw.decode("utf-8", errors="replace").splitlines() if l.strip()]
-                    records = [_json.loads(l) for l in lines]
-                else:
-                    records = _json.loads(raw.decode("utf-8", errors="replace"))
-                df = pd.DataFrame(records).astype(str)
-            elif content_type in ("text/csv", "text/plain") or ext == ".txt":
+            if content_type in ("text/csv", "text/plain") or ext == ".txt":
                 delimiter = sniff_delimiter(raw)
                 df = pd.read_csv(io.BytesIO(raw), sep=delimiter, dtype=str, keep_default_na=False, encoding="utf-8")
             else:
@@ -348,15 +340,7 @@ async def infer_schema(
 
     def _infer(raw: bytes, content_type: str, filename: str) -> dict:
         ext = os.path.splitext(filename)[-1].lower()
-        if ext in (".json", ".jsonl"):
-            import json as _json
-            if ext == ".jsonl":
-                lines = [l.strip() for l in raw.decode("utf-8", errors="replace").splitlines() if l.strip()]
-                records = [_json.loads(l) for l in lines]
-            else:
-                records = _json.loads(raw.decode("utf-8", errors="replace"))
-            df = pd.DataFrame(records)
-        elif content_type in ("text/csv", "text/plain") or ext == ".txt":
+        if content_type in ("text/csv", "text/plain") or ext == ".txt":
             delimiter = sniff_delimiter(raw)
             df = pd.read_csv(io.BytesIO(raw), sep=delimiter, encoding="utf-8")
         else:
