@@ -92,7 +92,29 @@ def _do_parse(
 ) -> dict:
     ext = os.path.splitext(filename)[-1].lower()
 
-    if content_type in ("text/csv",) or ext == ".txt":
+    if ext in (".json", ".jsonl") or content_type in ("application/json", "application/x-ndjson"):
+        import json as _json
+        import pandas as _pd
+        try:
+            if ext == ".jsonl":
+                lines = [l.strip() for l in raw.decode("utf-8", errors="replace").splitlines() if l.strip()]
+                records = [_json.loads(l) for l in lines]
+            else:
+                records = _json.loads(raw.decode("utf-8", errors="replace"))
+            df = _pd.DataFrame(records)
+            df = df.tail(PREVIEW_ROWS)
+            cols = list(df.columns)
+            rows = df.where(_pd.notnull(df), None).to_dict(orient="records")
+        except Exception as exc:
+            raise ValueError(f"Could not parse JSON file: {exc}") from exc
+        return {
+            "detected_delimiter": None,
+            "extension": ext,
+            "columns": cols,
+            "preview_rows": rows,
+        }
+
+    elif content_type in ("text/csv",) or ext == ".txt":
         delimiter = delimiter_override or sniff_delimiter(raw)
         try:
             columns, rows = _parse_csv(raw, delimiter)
@@ -168,3 +190,4 @@ async def get_file_details(
         size_bytes=record.size_bytes,
         **parse_result,
     )
+
