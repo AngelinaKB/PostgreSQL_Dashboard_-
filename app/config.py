@@ -5,24 +5,22 @@ class Settings(BaseSettings):
     model_config = SettingsConfigDict(
         env_file=".env",
         env_file_encoding="utf-8",
+        extra="ignore",
     )
 
-    # ── PostgreSQL staging DB ──
-    # No defaults — app fails at startup if .env is missing these.
     PG_HOST:     str
     PG_PORT:     int
     PG_USER:     str
     PG_PASSWORD: str
     PG_DATABASE: str
 
-    MAX_UPLOAD_SIZE_BYTES: int = 52_428_800  # 50 MB
+    MAX_UPLOAD_SIZE_BYTES: int = 52_428_800
 
-    # CORS — comma-separated allowed origins, no wildcard
-    ALLOWED_ORIGINS: str = "http://localhost:8000,http://127.0.0.1:8000"
+    ALLOWED_ORIGINS: str
 
     @property
     def cors_origins(self) -> list[str]:
-        return [o.strip() for o in self.ALLOWED_ORIGINS.split(",") if o.strip()]
+        return [o.strip().rstrip("/") for o in self.ALLOWED_ORIGINS.split(",") if o.strip()]
 
     @property
     def database_url(self) -> str:
@@ -32,7 +30,6 @@ class Settings(BaseSettings):
         )
 
     def pg_connect(self, dbname: str = None):
-        """Return a psycopg2 connection to any database on the same server."""
         import psycopg2
         return psycopg2.connect(
             host=self.PG_HOST,
