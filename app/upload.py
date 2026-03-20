@@ -78,26 +78,53 @@ async def upload_file(
     # --- For .txt files, verify the content is actually structured/delimited ---
     if ext == ".txt":
         import csv as _csv
-        sample = file_bytes[:4096].decode("utf-8", errors="replace")
-        # Validate it's structured — must have at least 2 columns
+        sample = file_bytes[:8192].decode("utf-8", errors="replace")
+        lines  = [l for l in sample.splitlines() if l.strip()]
+
+        if len(lines) < 2:
+            raise HTTPException(
+                status_code=status.HTTP_415_UNSUPPORTED_MEDIA_TYPE,
+                detail=".txt file must have at least a header row and one data row.",
+            )
+
         detected_delim = sniff_delimiter(file_bytes)
+
+        # Count columns per row — structured files have consistent counts
         try:
-            reader = _csv.reader(sample.splitlines()[:3], delimiter=detected_delim)
-            rows   = [r for r in reader if r]
-            if not rows or len(rows[0]) < 2:
+            col_counts = []
+            for line in lines[:20]:  # check up to 20 rows
+                row = next(_csv.reader([line], delimiter=detected_delim))
+                col_counts.append(len(row))
+
+            header_cols = col_counts[0]
+
+            # Must have at least 2 columns
+            if header_cols < 2:
                 raise HTTPException(
                     status_code=status.HTTP_415_UNSUPPORTED_MEDIA_TYPE,
                     detail=(
-                        ".txt files must be structured delimited text (e.g. tab, comma, "
-                        "tilde, pipe separated). Plain unstructured text is not supported."
+                        ".txt files must be structured delimited text with at least 2 columns. "
+                        "Plain unstructured text files are not supported."
                     ),
                 )
+
+            # Must be consistent — allow 1 row to differ (trailing delimiter etc.)
+            inconsistent = sum(1 for c in col_counts[1:] if c != header_cols)
+            if inconsistent > max(1, len(col_counts) // 5):
+                raise HTTPException(
+                    status_code=status.HTTP_415_UNSUPPORTED_MEDIA_TYPE,
+                    detail=(
+                        f"The .txt file does not appear to be consistently structured. "
+                        f"Header has {header_cols} columns but row counts vary. "
+                        "Only delimited structured files are supported."
+                    ),
+                )
+        except HTTPException:
+            raise
         except Exception as e:
-            if isinstance(e, HTTPException):
-                raise
             raise HTTPException(
                 status_code=status.HTTP_415_UNSUPPORTED_MEDIA_TYPE,
-                detail=f"Could not parse .txt file as delimited text: {e}",
+                detail=f"Could not validate .txt file structure: {e}",
             )
 
     # --- Insert into stg.staging_files ---
@@ -117,3 +144,4 @@ async def upload_file(
         content_type=record.content_type,
         size_bytes=record.size_bytes,
     )
+
