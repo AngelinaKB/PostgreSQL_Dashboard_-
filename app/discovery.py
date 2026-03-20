@@ -104,3 +104,40 @@ def list_columns(database: str, schema: str, table: str, token: str = Depends(re
         raise HTTPException(status_code=500, detail=f"Failed to list columns: {exc}")
     finally:
         conn.close()
+
+
+@router.get("/meta/preview/{database}/{schema}/{table}", summary="Get last 3 rows of a table")
+def preview_table(database: str, schema: str, table: str, token: str = Depends(require_session)) -> dict:  # type: ignore[assignment]
+    """Returns the last 3 rows of a table as a preview."""
+    try:
+        conn = session_pg_connect(token, dbname=database)
+    except Exception as exc:
+        raise HTTPException(status_code=404, detail=str(exc))
+    try:
+        with conn.cursor() as cur:
+            # Get column names
+            cur.execute("""
+                SELECT column_name FROM information_schema.columns
+                WHERE table_schema = %s AND table_name = %s
+                ORDER BY ordinal_position
+            """, (schema, table))
+            columns = [r[0] for r in cur.fetchall()]
+            if not columns:
+                raise HTTPException(status_code=404, detail=f"Table '{schema}.{table}' not found.")
+            # Get last 3 rows
+            cur.execute(f'SELECT * FROM "{schema}"."{table}" ORDER BY ctid DESC LIMIT 3')
+            raw_rows = cur.fetchall()
+            # Reverse so they're in natural order
+            raw_rows = list(reversed(raw_rows))
+            rows = [
+                {columns[i]: (str(v) if v is not None else None) for i, v in enumerate(row)}
+                for row in raw_rows
+            ]
+        return {"columns": columns, "rows": rows}
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Failed to preview table: {exc}")
+    finally:
+        conn.close()
+
