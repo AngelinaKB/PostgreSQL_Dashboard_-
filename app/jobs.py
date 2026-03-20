@@ -19,7 +19,7 @@ Architecture
   psycopg2 calls so true parallelism is achieved for DB-heavy work.
 """
 
-import traceback
+import logging
 import uuid
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
@@ -28,6 +28,8 @@ from typing import Any, Callable
 import psycopg2
 import psycopg2.extras
 from fastapi import APIRouter, HTTPException
+
+logger = logging.getLogger("data_ingestion")
 
 from app.config import settings
 
@@ -42,11 +44,7 @@ _executor = ThreadPoolExecutor(max_workers=4, thread_name_prefix="job-worker")
 # ---------------------------------------------------------------------------
 
 def _get_conn():
-    return psycopg2.connect(
-        host=settings.PG_HOST, port=settings.PG_PORT,
-        user=settings.PG_USER, password=settings.PG_PASSWORD,
-        dbname=settings.PG_DATABASE,
-    )
+    return settings.pg_connect()
 
 
 def create_job(file_id: uuid.UUID | None, action: str) -> uuid.UUID:
@@ -133,9 +131,8 @@ def _run_job(job_id: uuid.UUID, fn: Callable, *args, **kwargs):
         result = fn(*args, **kwargs)
         _update_job(job_id, "success", result=result)
     except Exception as exc:
-        tb = traceback.format_exc()
         _update_job(job_id, "failed", message=str(exc))
-        print(f"[job {job_id}] FAILED: {exc}\n{tb}")
+        logger.exception("Job %s crashed: %s", job_id, exc)
 
 
 def submit_job(
