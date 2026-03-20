@@ -201,8 +201,15 @@ def _parse_to_rows(
     """
     ext = os.path.splitext(filename)[-1].lower()
 
-    if content_type in ("text/csv", "text/plain") or ext == ".txt":
-        sample = raw[:4096].decode("utf-8", errors="replace")
+    if ext in (".json", ".jsonl"):
+        import json as _json
+        if ext == ".jsonl":
+            lines = [l.strip() for l in raw.decode("utf-8", errors="replace").splitlines() if l.strip()]
+            records = [_json.loads(l) for l in lines]
+        else:
+            records = _json.loads(raw.decode("utf-8", errors="replace"))
+        df = pd.DataFrame(records).astype(str)
+    elif content_type in ("text/csv", "text/plain") or ext == ".txt":
         delimiter = sniff_delimiter(raw)
         df = pd.read_csv(
             io.BytesIO(raw),
