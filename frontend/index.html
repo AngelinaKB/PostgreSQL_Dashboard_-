@@ -1,3 +1,4 @@
+
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -22,8 +23,6 @@
     /* ── navbar ── */
     .navbar { background: var(--bg); border-bottom: 0.5px solid var(--border); padding: 0 2rem; display: flex; align-items: center; justify-content: space-between; height: 52px; position: sticky; top: 0; z-index: 100; margin-bottom: 2rem; }
     .navbar-brand { display: flex; align-items: center; gap: 10px; }
-    .navbar-logo { width: 28px; height: 28px; background: var(--text); border-radius: 6px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
-    .navbar-logo svg { width: 16px; height: 16px; stroke: var(--bg); }
     .navbar-title { font-size: 15px; font-weight: 600; letter-spacing: -0.01em; }
     .navbar-sub { font-size: 12px; color: var(--text-tertiary); margin-left: 2px; }
     .navbar-right { display: flex; align-items: center; gap: 12px; }
@@ -31,9 +30,21 @@
     .navbar-conn-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--text-tertiary); flex-shrink: 0; }
     .navbar-conn-dot.connected { background: var(--text-success); }
     .navbar-links { display: flex; align-items: center; gap: 4px; }
-    .navbar-link { font-size: 13px; color: var(--text-secondary); text-decoration: none; padding: 5px 10px; border-radius: var(--radius-md); transition: background 0.1s, color 0.1s; }
+    .navbar-link { font-size: 13px; color: var(--text-secondary); text-decoration: none; padding: 5px 10px; border-radius: var(--radius-md); transition: background 0.1s, color 0.1s; white-space: nowrap; }
     .navbar-link:hover { background: var(--bg-secondary); color: var(--text); }
-    @media (max-width: 600px) { .navbar-links { display: none; } }
+    .navbar-conn-label { font-size: 12px; }
+    @media (max-width: 900px) {
+      .navbar { padding: 0 1rem; }
+      .navbar-link { font-size: 12px; padding: 5px 7px; }
+    }
+    @media (max-width: 680px) {
+      .navbar-links { display: none; }
+      .navbar-conn-label { display: none; }
+    }
+    @media (max-width: 480px) {
+      .navbar { height: 46px; }
+      .navbar-title { font-size: 13px; }
+    }
     body { font-family: var(--font); background: var(--bg-tertiary); color: var(--text); min-height: 100vh; padding: 0; }
     .page { max-width: 1100px; margin: 0 auto; padding: 0 1rem 2rem; }
     .topbar { display: flex; align-items: center; margin-bottom: 2rem; }
@@ -118,6 +129,8 @@
     .file-xls   { background: #0d3326; color: #6ecfab; }
     .file-xlsx  { background: #0d3326; color: #6ecfab; }
     .file-txt   { background: var(--bg-info); color: var(--text-info); }
+    .file-json  { background: #2a1f42; color: #c4a0f5; }
+    .file-jsonl { background: #2a1f42; color: #c4a0f5; }
     .file-other { background: var(--bg-secondary); color: var(--text-secondary); }
     .spinner { display: inline-block; width: 14px; height: 14px; border: 2px solid var(--border-md); border-top-color: var(--text); border-radius: 50%; animation: spin 0.7s linear infinite; }
     @keyframes spin { to { transform: rotate(360deg); } }
@@ -138,14 +151,23 @@
     .conn-input { width: 100%; padding: 7px 10px; font-size: 13px; font-family: var(--font-mono); border: 0.5px solid var(--border-md); border-radius: var(--radius-md); background: var(--bg-secondary); color: var(--text); }
     .conn-input:focus { outline: none; border-color: var(--text-secondary); }
     .conn-actions { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-top: 1rem; }
-    .conn-status { font-size: 13px; display: flex; align-items: center; gap: 6px; }
+    .conn-status { font-size: 13px; display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
     .conn-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--text-tertiary); flex-shrink: 0; }
     .conn-dot.connected { background: var(--text-success); }
     .conn-dot.error     { background: var(--text-danger); }
-    .saved-conn-row { display: flex; align-items: center; gap: 8px; margin-bottom: 1rem; }
-    .saved-conn-row select { flex: 1; font-size: 13px; padding: 7px 10px; border: 0.5px solid var(--border-md); border-radius: var(--radius-md); background: var(--bg-secondary); color: var(--text); }
+    .saved-conn-row { display: flex; align-items: center; gap: 8px; margin-bottom: 1rem; flex-wrap: wrap; }
+    .saved-conn-row select { flex: 1; min-width: 0; font-size: 13px; padding: 7px 10px; border: 0.5px solid var(--border-md); border-radius: var(--radius-md); background: var(--bg-secondary); color: var(--text); }
     .page-overlay { pointer-events: none; opacity: 0.35; transition: opacity 0.2s; user-select: none; }
-    @media (max-width: 600px) { .conn-grid { grid-template-columns: 1fr; } .conn-grid-full { grid-column: 1; } }
+    @media (max-width: 600px) {
+      .conn-grid { grid-template-columns: 1fr; }
+      .conn-grid-full { grid-column: 1; }
+      .conn-actions { flex-direction: column; align-items: stretch; }
+      .conn-actions .btn { width: 100%; justify-content: center; }
+      .saved-conn-row { flex-direction: column; align-items: stretch; }
+      .saved-conn-row select { width: 100%; }
+      .saved-conn-row .btn { width: 100%; justify-content: center; }
+      .conn-status { flex-direction: column; align-items: flex-start; gap: 6px; }
+    }
     @media (max-width: 768px) {
       .page { padding: 1rem 0.75rem; }
       .stats { grid-template-columns: 1fr 1fr; }
@@ -176,11 +198,6 @@
 <body>
 <nav class="navbar">
   <div class="navbar-brand">
-    <div class="navbar-logo">
-      <svg fill="none" viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg">
-        <path d="M2 4h12M2 8h12M2 12h8" stroke-width="1.5" stroke-linecap="round"/>
-      </svg>
-    </div>
     <div class="navbar-title">Data Ingestion</div>
   </div>
   <div class="navbar-links">
@@ -193,7 +210,7 @@
   <div class="navbar-right">
     <div class="navbar-conn">
       <div class="navbar-conn-dot" id="navbar-conn-dot"></div>
-      <span id="navbar-conn-label">Not connected</span>
+      <span class="navbar-conn-label" id="navbar-conn-label">Not connected</span>
     </div>
   </div>
 </nav>
@@ -277,8 +294,8 @@
     <div class="drop-zone" id="drop-zone" onclick="document.getElementById('file-input').click()">
       <svg class="drop-icon" viewBox="0 0 40 40" fill="none"><path d="M20 26V14M20 14L15 19M20 14L25 19" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/><path d="M10 31H30M7 22C5.34 20.4 5 18.1 5 16.5C5 11.8 8.8 8 13.5 8C13.9 8 14.3 8.02 14.7 8.07C16.1 5.4 18.9 3.5 22.2 3.5C26.9 3.5 30.7 7.3 30.7 12C30.7 12.3 30.68 12.58 30.65 12.86C33.5 13.8 35.5 16.5 35.5 19.5C35.5 21.6 34.5 23.5 33 24.8" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
       <div class="drop-title">Drop your file here or click to browse</div>
-      <div class="drop-sub">Accepts <b>.csv</b>, <b>.xls</b>, <b>.xlsx</b>, <b>.txt</b> &nbsp;·&nbsp; Max 50 MB</div>
-      <input type="file" id="file-input" accept=".csv,.xls,.xlsx,.txt">
+      <div class="drop-sub">Accepts <b>.csv</b>, <b>.xls</b>, <b>.xlsx</b>, <b>.txt</b>, <b>.json</b>, <b>.jsonl</b> &nbsp;·&nbsp; Max 50 MB</div>
+      <input type="file" id="file-input" accept=".csv,.xls,.xlsx,.txt,.json,.jsonl">
     </div>
     <div class="progress-wrap" id="progress-wrap">
       <div class="progress-bar-bg"><div class="progress-bar-fill" id="progress-fill"></div></div>
@@ -1010,7 +1027,7 @@
   function addHistory(details) {
     historyEmpty.style.display = 'none';
     const ext = fileExt(details.filename);
-    const cls = ['csv','xls','xlsx','txt'].includes(ext) ? 'file-'+ext : 'file-other';
+    const cls = ['csv','xls','xlsx','txt','json','jsonl'].includes(ext) ? 'file-'+ext : 'file-other';
     const item = document.createElement('div');
     item.className = 'history-item';
     item.innerHTML = `
@@ -1244,4 +1261,3 @@
 </script>
 </body>
 </html>
-
