@@ -14,9 +14,9 @@ class Settings(BaseSettings):
     PG_PASSWORD: str
     PG_DATABASE: str
 
-    MAX_UPLOAD_SIZE_BYTES: int = 52_428_800
+    MAX_UPLOAD_SIZE_BYTES: int   # required in .env, e.g. 52428800 for 50 MB
 
-    ALLOWED_ORIGINS: str
+    ALLOWED_ORIGINS: str         # required in .env, comma-separated
 
     @property
     def cors_origins(self) -> list[str]:
