@@ -77,3 +77,30 @@ def list_tables(database: str, schema: str, token: str = Depends(require_session
         raise HTTPException(status_code=500, detail=f"Failed to list tables: {exc}")
     finally:
         conn.close()
+
+
+@router.get("/meta/columns/{database}/{schema}/{table}", summary="List columns of a table")
+def list_columns(database: str, schema: str, table: str, token: str = Depends(require_session)) -> list[dict]:  # type: ignore[assignment]
+    """Returns column names and SQL types for a given table."""
+    try:
+        conn = session_pg_connect(token, dbname=database)
+    except Exception as exc:
+        raise HTTPException(status_code=404, detail=str(exc))
+    try:
+        with conn.cursor() as cur:
+            cur.execute("""
+                SELECT column_name, upper(data_type)
+                FROM information_schema.columns
+                WHERE table_schema = %s AND table_name = %s
+                ORDER BY ordinal_position
+            """, (schema, table))
+            rows = cur.fetchall()
+        if not rows:
+            raise HTTPException(status_code=404, detail=f"Table '{schema}.{table}' not found or has no columns.")
+        return [{"name": r[0], "sql_type": r[1]} for r in rows]
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Failed to list columns: {exc}")
+    finally:
+        conn.close()
