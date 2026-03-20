@@ -6,6 +6,7 @@
   <title>Data Ingestion</title>
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html { scroll-behavior: smooth; }
     :root {
       --bg: #1e1e1c; --bg-secondary: #2a2a28; --bg-tertiary: #323230;
       --bg-success: #173404; --bg-danger: #501313; --bg-warning: #412402; --bg-info: #042c53;
@@ -29,6 +30,10 @@
     .navbar-conn { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--text-secondary); }
     .navbar-conn-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--text-tertiary); flex-shrink: 0; }
     .navbar-conn-dot.connected { background: var(--text-success); }
+    .navbar-links { display: flex; align-items: center; gap: 4px; }
+    .navbar-link { font-size: 13px; color: var(--text-secondary); text-decoration: none; padding: 5px 10px; border-radius: var(--radius-md); transition: background 0.1s, color 0.1s; }
+    .navbar-link:hover { background: var(--bg-secondary); color: var(--text); }
+    @media (max-width: 600px) { .navbar-links { display: none; } }
     body { font-family: var(--font); background: var(--bg-tertiary); color: var(--text); min-height: 100vh; padding: 0; }
     .page { max-width: 1100px; margin: 0 auto; padding: 0 1rem 2rem; }
     .topbar { display: flex; align-items: center; margin-bottom: 2rem; }
@@ -39,7 +44,7 @@
     .stat-label { font-size: 12px; color: var(--text-secondary); margin-bottom: 6px; }
     .stat-value { font-size: 24px; font-weight: 500; }
     .stat-value span { font-size: 13px; font-weight: 400; color: var(--text-secondary); margin-left: 3px; }
-    .card { background: var(--bg); border: 0.5px solid var(--border); border-radius: var(--radius-lg); padding: 1.5rem; margin-bottom: 1.5rem; }
+    .card { background: var(--bg); border: 0.5px solid var(--border); border-radius: var(--radius-lg); padding: 1.5rem; margin-bottom: 1.5rem; scroll-margin-top: 64px; }
     .drop-zone { border: 1.5px dashed var(--border-md); border-radius: var(--radius-md); padding: 2.5rem 1rem; text-align: center; cursor: pointer; transition: background 0.15s; }
     .drop-zone:hover, .drop-zone.drag { background: var(--bg-secondary); }
     .drop-icon { width: 40px; height: 40px; margin: 0 auto 12px; color: var(--text-tertiary); }
@@ -126,7 +131,7 @@
     .job-status-bar { display:none; align-items:center; gap:10px; padding:10px 14px; background:var(--bg-info); border:0.5px solid var(--border-md); border-radius:var(--radius-md); margin-top:1rem; font-size:13px; color:var(--text-info); }
 
     /* ── connection card ── */
-    .conn-card { background: var(--bg); border: 0.5px solid var(--border); border-radius: var(--radius-lg); padding: 1.5rem; margin-bottom: 1.5rem; }
+    .conn-card { background: var(--bg); border: 0.5px solid var(--border); border-radius: var(--radius-lg); padding: 1.5rem; margin-bottom: 1.5rem; scroll-margin-top: 64px; }
     .conn-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin: 1rem 0; }
     .conn-grid-full { grid-column: 1 / -1; }
     .conn-label { font-size: 11px; color: var(--text-tertiary); text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 4px; }
@@ -176,9 +181,14 @@
         <path d="M2 4h12M2 8h12M2 12h8" stroke-width="1.5" stroke-linecap="round"/>
       </svg>
     </div>
-    <div>
-      <div class="navbar-title">Data Ingestion</div>
-    </div>
+    <div class="navbar-title">Data Ingestion</div>
+  </div>
+  <div class="navbar-links">
+    <a class="navbar-link" href="#conn-card">Connection</a>
+    <a class="navbar-link" href="#upload-card">Upload</a>
+    <a class="navbar-link" href="#schema-card">Schema</a>
+    <a class="navbar-link" href="#post-load-card">Post-load</a>
+    <a class="navbar-link" href="#history-card">History</a>
   </div>
   <div class="navbar-right">
     <div class="navbar-conn">
@@ -412,7 +422,7 @@
   </div>
 
   <!-- History -->
-  <div class="card">
+  <div class="card" id="history-card">
     <div class="section-title">Upload history</div>
     <div class="history-empty" id="history-empty">No uploads yet this session</div>
     <div class="history-list" id="history-list"></div>
@@ -1234,3 +1244,4 @@
 </script>
 </body>
 </html>
+
