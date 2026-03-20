@@ -7,7 +7,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.config import settings
 from app.db import get_db
 from app.models import StagingFile
-from app.utils import sniff_delimiter
 
 router = APIRouter()
 
@@ -75,91 +74,6 @@ async def upload_file(
 
     file_bytes = buf.getvalue()
 
-    # --- For .txt files, verify the content is actually structured/delimited ---
-    if ext == ".txt":
-        import csv as _csv
-        import re as _re
-        sample = file_bytes[:8192].decode("utf-8", errors="replace")
-        lines  = [l for l in sample.splitlines() if l.strip()]
-
-        if len(lines) < 2:
-            raise HTTPException(
-                status_code=status.HTTP_415_UNSUPPORTED_MEDIA_TYPE,
-                detail=".txt file must have at least a header row and one data row.",
-            )
-
-        # --- Reject known unstructured formats immediately ---
-        first = lines[0].strip()
-
-        # Reject JSON / JSONL
-        if first.startswith("{") or first.startswith("["):
-            raise HTTPException(
-                status_code=status.HTTP_415_UNSUPPORTED_MEDIA_TYPE,
-                detail=(
-                    "This looks like a JSON or JSONL file, not a delimited text file. "
-                    "Only structured delimited files (CSV-like) are supported."
-                ),
-            )
-
-        # Reject log files — lines starting with timestamps or log levels
-        log_pattern = _re.compile(
-            r"^(\d{4}-\d{2}-\d{2}[\sT]|\[\d|\d{2}:\d{2}:\d{2}|"
-            r"(DEBUG|INFO|WARNING|ERROR|CRITICAL|WARN)\s)",
-            _re.IGNORECASE,
-        )
-        log_line_count = sum(1 for l in lines[:10] if log_pattern.match(l.strip()))
-        if log_line_count > len(lines[:10]) // 2:
-            raise HTTPException(
-                status_code=status.HTTP_415_UNSUPPORTED_MEDIA_TYPE,
-                detail=(
-                    "This looks like a log file, not a delimited text file. "
-                    "Only structured delimited files (CSV-like) are supported."
-                ),
-            )
-
-        # --- Detect delimiter and validate structure ---
-        detected_delim = sniff_delimiter(file_bytes)
-
-        try:
-            col_counts = []
-            for line in lines[:30]:
-                row = next(_csv.reader([line], delimiter=detected_delim))
-                col_counts.append(len(row))
-
-            header_cols = col_counts[0]
-
-            # Must have at least 2 columns
-            if header_cols < 2:
-                raise HTTPException(
-                    status_code=status.HTTP_415_UNSUPPORTED_MEDIA_TYPE,
-                    detail=(
-                        ".txt files must have at least 2 delimited columns. "
-                        "Plain unstructured text files are not supported."
-                    ),
-                )
-
-            # All rows (not just most) must match header column count
-            # Allow only 1 outlier row for trailing delimiters / blank lines
-            data_counts = col_counts[1:]
-            inconsistent = sum(1 for c in data_counts if c != header_cols)
-            if inconsistent > 1:
-                raise HTTPException(
-                    status_code=status.HTTP_415_UNSUPPORTED_MEDIA_TYPE,
-                    detail=(
-                        f"File structure is inconsistent: header has {header_cols} columns "
-                        f"but {inconsistent} rows have a different count. "
-                        "Only consistently delimited files are supported."
-                    ),
-                )
-
-        except HTTPException:
-            raise
-        except Exception as e:
-            raise HTTPException(
-                status_code=status.HTTP_415_UNSUPPORTED_MEDIA_TYPE,
-                detail=f"Could not validate .txt file structure: {e}",
-            )
-
     # --- Insert into stg.staging_files ---
     record = StagingFile(
         filename=file.filename,
@@ -177,4 +91,3 @@ async def upload_file(
         content_type=record.content_type,
         size_bytes=record.size_bytes,
     )
-
